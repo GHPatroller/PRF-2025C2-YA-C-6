@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import ZoomMtgEmbedded from "@zoom/meetingsdk/embedded";
 
-const GRACE_MS = 10_000;   // 10s desde que la cámara está en OFF
+const GRACE_MS = 10_000;   // 10 seg gracia
 const STABILIZE_MS = 1200; // delay para que bVideoOn se estabilice
 const POLL_MS = 1000;      // frecuencia del poll del roster
 
@@ -12,12 +12,12 @@ export default function ZoomMeeting() {
   const [waitingUsers, setWaitingUsers] = useState([]);
 
   // Timers y estado
-  const stabilizeTimersRef = useRef(new Map()); // userId -> timeoutId
-  const graceTimersRef = useRef(new Map());     // userId -> timeoutId
+  const stabilizeTimersRef = useRef(new Map()); // userId a timeoutId
+  const graceTimersRef = useRef(new Map());     // userId a timeoutId
   const heldSetRef = useRef(new Set());         // userId ya enviados a hold
   const pollRef = useRef(null);                 // setInterval id
 
-  // ---------- helpers ----------
+  // helpers
   const getRoster = () => clientRef.current?.getAttendeeslist?.() || [];
   const toArray = (x) => (Array.isArray(x) ? x : [x].filter(Boolean));
   const isBool = (v) => typeof v === "boolean";
@@ -63,12 +63,12 @@ export default function ZoomMeeting() {
     }
   };
 
-  // Lógica central: arranca/cancela timers según estado de cámara actual
+  // Logica central: arranca/cancela timers segun estado de camara actual
   const handleVideoState = (user) => {
     if (!user || user.isHost || user.isCohost) return;
 
     if (user.bVideoOn === true) {
-      // Cámara ON -> cancelar cualquier timer
+      // Camara ON -> cancelar cualquier timer
       clearAllTimers(user.userId);
       return;
     }
@@ -135,7 +135,7 @@ export default function ZoomMeeting() {
     };
   }, []);
 
-  // ---------- eventos + polling ----------
+  //  eventos y polling
   useEffect(() => {
     const client = clientRef.current;
     if (!client) return;
@@ -163,7 +163,7 @@ export default function ZoomMeeting() {
       for (const it of items) {
         const user = findUserFromPayload(it) || it;
         if (!user) continue;
-        handleVideoState(user); // nunca hold directo acá
+        handleVideoState(user); 
       }
     };
 
@@ -186,11 +186,11 @@ export default function ZoomMeeting() {
     client.on?.("user-left", onUserRemoved);
     client.on?.("user-left-meeting", onUserRemoved);
 
-    // ---- Polling del roster: backstop si el evento no llega ----
+    // Polling del roster: backstop si el evento no llega
     if (!pollRef.current) {
       pollRef.current = setInterval(() => {
         const roster = getRoster();
-        // Aplicar la misma lógica a todos los participantes
+        // misma logica a todos los participantes
         for (const u of roster) handleVideoState(u);
       }, POLL_MS);
     }
@@ -212,7 +212,7 @@ export default function ZoomMeeting() {
     };
   }, []);
 
-  // ---------- acciones host ----------
+  // acciones del host
   const createAndJoinMeeting = async () => {
     const client = clientRef.current;
     if (!client) return;
