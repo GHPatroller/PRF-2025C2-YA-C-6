@@ -12,10 +12,10 @@ export default function ZoomMeeting() {
   const [waitingUsers, setWaitingUsers] = useState([]);
 
   // Timers y estado
-  const stabilizeTimersRef = useRef(new Map()); // userId a timeoutId
-  const graceTimersRef = useRef(new Map());     // userId a timeoutId
-  const heldSetRef = useRef(new Set());         // userId ya enviados a hold
-  const pollRef = useRef(null);                 // setInterval id
+  const stabilizeTimersRef = useRef(new Map());
+  const graceTimersRef = useRef(new Map());
+  const heldSetRef = useRef(new Set());
+  const pollRef = useRef(null);
 
   // helpers
   const getRoster = () => clientRef.current?.getAttendeeslist?.() || [];
@@ -38,11 +38,13 @@ export default function ZoomMeeting() {
     if (t) clearTimeout(t);
     stabilizeTimersRef.current.delete(userId);
   };
+
   const clearGraceTimer = (userId) => {
     const t = graceTimersRef.current.get(userId);
     if (t) clearTimeout(t);
     graceTimersRef.current.delete(userId);
   };
+
   const clearAllTimers = (userId) => {
     clearStabilizeTimer(userId);
     clearGraceTimer(userId);
@@ -52,6 +54,7 @@ export default function ZoomMeeting() {
     if (!user?.userId) return;
     if (user.isHost || user.isCohost) return;
     if (heldSetRef.current.has(user.userId)) return;
+
     try {
       await clientRef.current.putOnHold(user.userId, true);
       heldSetRef.current.add(user.userId);
@@ -63,12 +66,11 @@ export default function ZoomMeeting() {
     }
   };
 
-  // Logica central: arranca/cancela timers segun estado de camara actual
+  // arranca/cancela timers segun estado de camara actual
   const handleVideoState = (user) => {
     if (!user || user.isHost || user.isCohost) return;
 
     if (user.bVideoOn === true) {
-      // Camara ON -> cancelar cualquier timer
       clearAllTimers(user.userId);
       return;
     }
@@ -81,8 +83,11 @@ export default function ZoomMeeting() {
           clearStabilizeTimer(user.userId);
           handleVideoState(fresh);
         }, STABILIZE_MS);
+
         stabilizeTimersRef.current.set(user.userId, temp);
-        console.log(`⏳ Esperando estado cámara de ${user.displayName || user.userId} (${STABILIZE_MS}ms)`);
+        console.log(
+          `⏳ Esperando estado cámara de ${user.displayName || user.userId} (${STABILIZE_MS}ms)`
+        );
       }
       return;
     }
@@ -91,9 +96,12 @@ export default function ZoomMeeting() {
     if (!graceTimersRef.current.has(user.userId)) {
       const tid = setTimeout(async () => {
         const fresh = getRoster().find((u) => u.userId === user.userId) || user;
+
         if (fresh?.bVideoOn === false) {
-          await holdOnce(fresh); // ÚNICO lugar que hace hold tras vencer el grace
-          console.log(`⏱️ Grace agotado (${GRACE_MS / 1000}s) para ${fresh.displayName || fresh.userId}`);
+          await holdOnce(fresh);
+          console.log(
+            `⏱️ Grace agotado (${GRACE_MS / 1000}s) para ${fresh.displayName || fresh.userId}`
+          );
         } else {
           console.log(`✅ ${fresh?.displayName || user.userId} encendió cámara a tiempo`);
           clearAllTimers(user.userId);
@@ -101,7 +109,9 @@ export default function ZoomMeeting() {
       }, GRACE_MS);
 
       graceTimersRef.current.set(user.userId, tid);
-      console.log(`⏳ Grace ${GRACE_MS / 1000}s para ${user.displayName || user.userId} (cámara OFF)`);
+      console.log(
+        `⏳ Grace ${GRACE_MS / 1000}s para ${user.displayName || user.userId} (cámara OFF)`
+      );
     }
   };
 
@@ -117,7 +127,10 @@ export default function ZoomMeeting() {
       zoomAppRoot: zoomRef.current,
       language: "es-ES",
       customize: {
-        video: { isResizable: true, viewSizes: { default: { width: 800, height: 450 } } },
+        video: {
+          isResizable: true,
+          viewSizes: { default: { width: 800, height: 450 } },
+        },
       },
       success: () => console.log("✅ SDK inicializado"),
       error: (err) => console.error("❌ Error init:", err),
@@ -130,12 +143,13 @@ export default function ZoomMeeting() {
       stabilizeTimersRef.current.clear();
       graceTimersRef.current.clear();
       heldSetRef.current.clear();
+
       if (pollRef.current) clearInterval(pollRef.current);
       pollRef.current = null;
     };
   }, []);
 
-  //  eventos y polling
+  // eventos y polling
   useEffect(() => {
     const client = clientRef.current;
     if (!client) return;
@@ -148,10 +162,12 @@ export default function ZoomMeeting() {
     const onUserAdded = (payload) => {
       const items = toArray(payload);
       console.log("👤 Entró usuario(s):", items);
+
       for (const it of items) {
         const user = findUserFromPayload(it);
         if (user) handleVideoState(user);
       }
+
       // Re-chequeo tras estabilizar por si el payload vino sin bVideoOn
       setTimeout(() => {
         getRoster().forEach((u) => handleVideoState(u));
@@ -163,7 +179,7 @@ export default function ZoomMeeting() {
       for (const it of items) {
         const user = findUserFromPayload(it) || it;
         if (!user) continue;
-        handleVideoState(user); 
+        handleVideoState(user);
       }
     };
 
@@ -181,16 +197,15 @@ export default function ZoomMeeting() {
     client.on("onUserJoinWaitingRoom", onJoinWaiting);
     client.on("user-added", onUserAdded);
     client.on("user-updated", onUserUpdated);
-    client.on?.("onUserVideoStatusChange", onUserUpdated); // algunas versiones
+    client.on?.("onUserVideoStatusChange", onUserUpdated);
     client.on?.("user-removed", onUserRemoved);
     client.on?.("user-left", onUserRemoved);
     client.on?.("user-left-meeting", onUserRemoved);
 
-    // Polling del roster: backstop si el evento no llega
+    // Polling del roster
     if (!pollRef.current) {
       pollRef.current = setInterval(() => {
         const roster = getRoster();
-        // misma logica a todos los participantes
         for (const u of roster) handleVideoState(u);
       }, POLL_MS);
     }
@@ -205,6 +220,7 @@ export default function ZoomMeeting() {
         client.off?.("user-left", onUserRemoved);
         client.off?.("user-left-meeting", onUserRemoved);
       } catch {}
+
       if (pollRef.current) {
         clearInterval(pollRef.current);
         pollRef.current = null;
@@ -262,7 +278,7 @@ export default function ZoomMeeting() {
       await client.admit(guidOrId);
       console.log("✅ Admitido desde Waiting Room");
       setWaitingUsers((prev) => prev.slice(1));
-      // limpiar estado para reevaluar
+
       if (userToAdmit.userId) {
         clearAllTimers(userToAdmit.userId);
         heldSetRef.current.delete(userToAdmit.userId);
@@ -287,9 +303,11 @@ export default function ZoomMeeting() {
   const sendToOnHold = async () => {
     const client = clientRef.current;
     if (!client) return;
+
     const attendees = getRoster();
     const target = attendees.find((a) => !a.isHost && !a.isCohost) || attendees[0];
     if (!target?.userId) return console.log("❌ No hay participante válido");
+
     await holdOnce(target);
     clearAllTimers(target.userId);
   };
@@ -359,3 +377,4 @@ export default function ZoomMeeting() {
     </div>
   );
 }
+
