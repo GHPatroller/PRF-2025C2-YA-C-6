@@ -3,6 +3,8 @@ import ZoomMtgEmbedded from "@zoom/meetingsdk/embedded";
 import { Button } from "./components/ui/button/Button";
 import { useZoomClient } from "./hooks/useZoomClient";
 import { useUserManagement } from "./hooks/useUserManagement";
+import { MeetingControls } from "./components/features/meeting/MeetingControls";
+
 
 const GRACE_MS = 10_000;   // 10 seg gracia
 const STABILIZE_MS = 1200; // delay para que bVideoOn se estabilice
@@ -17,19 +19,12 @@ export default function ZoomMeeting() {
     <div style={{ padding: "20px", textAlign: "center" }}>
       <h1>Zoom Embedded PoC</h1>
 
-      <Button variant="large" onClick={createAndJoinMeeting}>
-        Crear y Unirme como Host
-      </Button>
-
-      <div style={{ marginTop: 16 }}>
-        <Button variant="warning" onClick={sendToOnHold}>
-          Mandar a sala de espera
-        </Button>
-
-        <Button variant="success" onClick={admitOnHold}>
-          Sacar de sala de espera
-        </Button>
-      </div>
+      <MeetingControls 
+        onCreateJoin={createAndJoinMeeting}
+        onSendToWaiting={sendToOnHold}
+        onAdmitFromWaiting={admitOnHold}
+        waitingUsersCount={waitingUsers.length}
+      />
 
       <div
         ref={zoomRef}
