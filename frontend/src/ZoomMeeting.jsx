@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import ZoomMtgEmbedded from "@zoom/meetingsdk/embedded";
+import { zoomAPI } from "./services/zoomAPI";
 
 const GRACE_MS = 10_000;   // 10 seg gracia
 const STABILIZE_MS = 1200; // delay para que bVideoOn se estabilice
@@ -234,19 +235,8 @@ export default function ZoomMeeting() {
     if (!client) return;
 
     try {
-      const createRes = await fetch("http://localhost:3000/create-meeting", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-      });
-      const { meetingNumber, password } = await createRes.json();
-      console.log("🎯 Reunión creada:", meetingNumber, password);
-
-      const signatureRes = await fetch("http://localhost:3000/get-signature", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ meetingNumber, role: 1 }),
-      });
-      const { signature } = await signatureRes.json();
+      const { meetingNumber, password } = await zoomAPI.createMeeting();
+      const { signature } = await zoomAPI.getSignature(meetingNumber, 1);
 
       try {
         await client.leaveMeeting(true);
