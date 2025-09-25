@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import ZoomMtgEmbedded from "@zoom/meetingsdk/embedded";
 import { zoomAPI } from "./services/zoomAPI";
 import { Button } from "./components/ui/button/Button";
+import { useZoomClient } from "./hooks/useZoomClient";
 
 const GRACE_MS = 10_000;   // 10 seg gracia
 const STABILIZE_MS = 1200; // delay para que bVideoOn se estabilice
@@ -9,7 +10,7 @@ const POLL_MS = 1000;      // frecuencia del poll del roster
 
 export default function ZoomMeeting() {
   const zoomRef = useRef(null);
-  const clientRef = useRef(null);
+  const clientRef = useZoomClient(zoomRef);
 
   const [waitingUsers, setWaitingUsers] = useState([]);
 
@@ -118,38 +119,7 @@ export default function ZoomMeeting() {
   };
 
   // ---------- init SDK ----------
-  useEffect(() => {
-    if (!zoomRef.current) return;
 
-    const client = ZoomMtgEmbedded.createClient();
-    clientRef.current = client;
-
-    client.init({
-      debug: true,
-      zoomAppRoot: zoomRef.current,
-      language: "es-ES",
-      customize: {
-        video: {
-          isResizable: true,
-          viewSizes: { default: { width: 800, height: 450 } },
-        },
-      },
-      success: () => console.log("✅ SDK inicializado"),
-      error: (err) => console.error("❌ Error init:", err),
-    });
-
-    return () => {
-      // limpiar al desmontar
-      stabilizeTimersRef.current.forEach((t) => clearTimeout(t));
-      graceTimersRef.current.forEach((t) => clearTimeout(t));
-      stabilizeTimersRef.current.clear();
-      graceTimersRef.current.clear();
-      heldSetRef.current.clear();
-
-      if (pollRef.current) clearInterval(pollRef.current);
-      pollRef.current = null;
-    };
-  }, []);
 
   // eventos y polling
   useEffect(() => {
