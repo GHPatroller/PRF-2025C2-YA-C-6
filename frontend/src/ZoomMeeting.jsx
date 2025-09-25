@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import ZoomMtgEmbedded from "@zoom/meetingsdk/embedded";
 import { zoomAPI } from "./services/zoomAPI";
+import { Button } from "./components/ui/button/Button";
 
 const GRACE_MS = 10_000;   // 10 seg gracia
 const STABILIZE_MS = 1200; // delay para que bVideoOn se estabilice
@@ -306,53 +307,18 @@ export default function ZoomMeeting() {
     <div style={{ padding: "20px", textAlign: "center" }}>
       <h1>Zoom Embedded PoC</h1>
 
-      <button
-        onClick={createAndJoinMeeting}
-        style={{
-          padding: "12px 25px",
-          fontSize: "16px",
-          background: "#2d8cff",
-          color: "white",
-          border: "none",
-          borderRadius: "5px",
-          cursor: "pointer",
-          margin: "10px",
-        }}
-      >
+      <Button variant="large" onClick={createAndJoinMeeting}>
         Crear y Unirme como Host
-      </button>
+      </Button>
 
       <div style={{ marginTop: 16 }}>
-        <button
-          onClick={sendToOnHold}
-          style={{
-            padding: "10px 20px",
-            fontSize: "16px",
-            background: "#ff9800",
-            color: "white",
-            border: "none",
-            borderRadius: "5px",
-            cursor: "pointer",
-            marginRight: 8,
-          }}
-        >
+        <Button variant="warning" onClick={sendToOnHold}>
           Mandar a sala de espera
-        </button>
+        </Button>
 
-        <button
-          onClick={admitOnHold}
-          style={{
-            padding: "10px 20px",
-            fontSize: "16px",
-            background: "#4caf50",
-            color: "white",
-            border: "none",
-            borderRadius: "5px",
-            cursor: "pointer",
-          }}
-        >
+        <Button variant="success" onClick={admitOnHold}>
           Sacar de sala de espera
-        </button>
+        </Button>
       </div>
 
       <div
