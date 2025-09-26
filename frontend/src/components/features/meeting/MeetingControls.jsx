@@ -5,7 +5,9 @@ export const MeetingControls = ({
   onCreateJoin, 
   onSendToWaiting, 
   onAdmitFromWaiting, 
-  waitingUsersCount 
+  waitingUsersCount,
+  isRecreo = false,          
+  onToggleRecreo = () => {}  
 }) => {
   return (
     <div>
@@ -18,10 +20,31 @@ export const MeetingControls = ({
           Mandar a sala de espera
         </Button>
 
-        <Button variant="success" onClick={onAdmitFromWaiting} disabled={waitingUsersCount === 0}>
+        <Button 
+          variant="success" 
+          onClick={onAdmitFromWaiting} 
+          disabled={waitingUsersCount === 0}
+        >
           Sacar de sala de espera ({waitingUsersCount})
         </Button>
       </div>
+
+      {/* Botón RECREO */}
+      <div style={{ marginTop: 16 }}>
+        <Button
+          variant={isRecreo ? "warning" : "secondary"}
+          onClick={onToggleRecreo}
+          title={isRecreo ? "Reanudar regla de cámara" : "Pausar regla de cámara"}
+        >
+          {isRecreo ? "Finalizar RECREO" : "RECREO"}
+        </Button>
+      </div>
+
+      {isRecreo && (
+        <div style={{ marginTop: 8, padding: 8, border: "1px dashed #e1b12c", borderRadius: 8 }}>
+          <strong>Recreo:</strong> la regla de cámara está pausada.
+        </div>
+      )}
     </div>
   );
 };

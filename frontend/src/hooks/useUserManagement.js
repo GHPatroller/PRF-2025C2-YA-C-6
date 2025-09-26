@@ -1,20 +1,25 @@
+
 import { useEffect, useRef, useState } from 'react';
 import { zoomAPI } from "../services/zoomAPI";
 
-const GRACE_MS = 10_000;   // 10 seg gracia
-const STABILIZE_MS = 1200; // delay para que bVideoOn se estabilice
+const GRACE_MS = 10_000;   // 10 seg de gracia con cámara off
+const STABILIZE_MS = 1200; // tiempo para estabilizar bVideoOn
 const POLL_MS = 1000;      // frecuencia del poll del roster
 
-export const useUserManagement = (clientRef) => {
+export const useUserManagement = (clientRef, opts = {}) => {
+  const { pauseCameraRule = false } = opts; 
+
   const [waitingUsers, setWaitingUsers] = useState([]);
 
-  // Timers y estado
-  const stabilizeTimersRef = useRef(new Map());
-  const graceTimersRef = useRef(new Map());
-  const heldSetRef = useRef(new Set());
-  const pollRef = useRef(null);
+  // Timers y estado por usuario
+  const stabilizeTimersRef = useRef(new Map()); 
+  const graceTimersRef = useRef(new Map());     
+  const heldSetRef = useRef(new Set());         
+  const pollRef = useRef(null);                
 
-  // helpers
+  const pausedRef = useRef(false);
+
+  // Helpers
   const getRoster = () => clientRef?.current?.getAttendeeslist?.() || [];
   const toArray = (x) => (Array.isArray(x) ? x : [x].filter(Boolean));
   const isBool = (v) => typeof v === 'boolean';
@@ -47,6 +52,7 @@ export const useUserManagement = (clientRef) => {
     clearGraceTimer(userId);
   };
 
+  // Mandar a Waiting Room una sola vez
   const holdOnce = async (user) => {
     if (!user?.userId) return;
     if (user.isHost || user.isCohost) return;
@@ -63,8 +69,8 @@ export const useUserManagement = (clientRef) => {
     }
   };
 
-  // arranca/cancela timers segun estado de camara actual
   const handleVideoState = (user) => {
+    if (pausedRef.current) return; 
     if (!user || user.isHost || user.isCohost) return;
 
     if (user.bVideoOn === true) {
@@ -73,7 +79,7 @@ export const useUserManagement = (clientRef) => {
     }
 
     if (!isBool(user.bVideoOn)) {
-      // Estado indefinido -> estabilizar antes de decidir
+      // Estado indefinido -> esperar estabilización
       if (!stabilizeTimersRef.current.has(user.userId)) {
         const temp = setTimeout(() => {
           const fresh = getRoster().find((u) => u.userId === user.userId) || user;
@@ -89,9 +95,10 @@ export const useUserManagement = (clientRef) => {
       return;
     }
 
-    // bVideoOn === false
+    // Cámara apagada con estado estable -> iniciar gracia
     if (!graceTimersRef.current.has(user.userId)) {
       const tid = setTimeout(async () => {
+        if (pausedRef.current) return; 
         const fresh = getRoster().find((u) => u.userId === user.userId) || user;
 
         if (fresh?.bVideoOn === false) {
@@ -112,12 +119,13 @@ export const useUserManagement = (clientRef) => {
     }
   };
 
-  // eventos y polling
+  // Suscripción a eventos + Poll del roster
   useEffect(() => {
     const client = clientRef?.current;
     if (!client) return;
 
     const onJoinWaiting = (payload) => {
+      if (pausedRef.current) return;
       setWaitingUsers((prev) => [...prev, ...toArray(payload)]);
       console.log('⏳ Waiting Room:', payload);
     };
@@ -125,6 +133,7 @@ export const useUserManagement = (clientRef) => {
     const onUserAdded = (payload) => {
       const items = toArray(payload);
       console.log('👤 Entró usuario(s):', items);
+      if (pausedRef.current) return;
 
       for (const it of items) {
         const user = findUserFromPayload(it);
@@ -133,11 +142,13 @@ export const useUserManagement = (clientRef) => {
 
       // Re-chequeo tras estabilizar por si el payload vino sin bVideoOn
       setTimeout(() => {
+        if (pausedRef.current) return;
         getRoster().forEach((u) => handleVideoState(u));
       }, STABILIZE_MS);
     };
 
     const onUserUpdated = (payload) => {
+      if (pausedRef.current) return;
       const items = toArray(payload);
       for (const it of items) {
         const user = findUserFromPayload(it) || it;
@@ -168,6 +179,7 @@ export const useUserManagement = (clientRef) => {
     // Polling del roster
     if (!pollRef.current) {
       pollRef.current = setInterval(() => {
+        if (pausedRef.current) return;
         const roster = getRoster();
         for (const u of roster) handleVideoState(u);
       }, POLL_MS);
@@ -189,7 +201,6 @@ export const useUserManagement = (clientRef) => {
         pollRef.current = null;
       }
 
-      // Limpiar todos los timers
       stabilizeTimersRef.current.forEach((t) => clearTimeout(t));
       graceTimersRef.current.forEach((t) => clearTimeout(t));
       stabilizeTimersRef.current.clear();
@@ -198,23 +209,50 @@ export const useUserManagement = (clientRef) => {
     };
   }, [clientRef]);
 
-  // acciones del host
+  // Pausar/Reanudar regla (RECREO)
+  useEffect(() => {
+    pausedRef.current = pauseCameraRule;
+
+    if (pauseCameraRule) {
+      stabilizeTimersRef.current.forEach((t) => clearTimeout(t));
+      graceTimersRef.current.forEach((t) => clearTimeout(t));
+      stabilizeTimersRef.current.clear();
+      graceTimersRef.current.clear();
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+      console.log("⏸️ Regla de cámara pausada (RECREO)");
+    } else {
+      // relanzar poll
+      if (!pollRef.current && clientRef?.current) {
+        pollRef.current = setInterval(() => {
+          if (pausedRef.current) return;
+          const roster = getRoster();
+          for (const u of roster) handleVideoState(u);
+        }, POLL_MS);
+      }
+      console.log("▶️ Regla de cámara reanudada");
+    }
+  }, [pauseCameraRule, clientRef]);
+
+  // Acciones del host
   const createAndJoinMeeting = async () => {
     const client = clientRef?.current;
     if (!client) return;
 
     try {
-      const { meetingNumber, password } = await zoomAPI.createMeeting();
+      const resp = await zoomAPI.createMeeting();
+      const meetingNumber = String(resp.meetingNumber ?? resp.id); 
+      const password = resp.password || '';
       const { signature } = await zoomAPI.getSignature(meetingNumber, 1);
 
-      try {
-        await client.leaveMeeting(true);
-      } catch {}
+      try { await client.leaveMeeting(true); } catch {}
 
       await client.join({
         signature,
-        meetingNumber: String(meetingNumber),
-        password: password || '',
+        meetingNumber,
+        password,
         userName: 'Host PoC',
       });
 
@@ -276,6 +314,6 @@ export const useUserManagement = (clientRef) => {
     createAndJoinMeeting,
     admitOnHold,
     sendToOnHold,
-    handleVideoState
+    handleVideoState,
   };
 };
