@@ -1,44 +1,38 @@
+// src/hooks/useWaitingRoom.js
 import { useState } from 'react';
-import { userUtils } from './utils/userUtils';
 
-export const useWaitingRoom = (clientRef, videoControl) => {
+export const useWaitingRoom = () => {
   const [waitingUsers, setWaitingUsers] = useState([]);
 
-  const admitFromWaitingRoom = async (userToAdmit) => {
-    const client = clientRef?.current;
-    if (!client || !userToAdmit) return;
-
-    const guidOrId = userToAdmit.userGuid || userToAdmit.userGUID || userToAdmit.userId;
-    if (!guidOrId) return console.log('❌ Falta userGuid/userId para admitir');
-
-    try {
-      await client.admit(guidOrId);
-      console.log('✅ Admitido desde Waiting Room');
-      
-      // Remover de waitingUsers
-      setWaitingUsers(prev => prev.filter(user => 
-        user.userGuid !== userToAdmit.userGuid && 
-        user.userGUID !== userToAdmit.userGUID &&
-        user.userId !== userToAdmit.userId
-      ));
-
-      // Limpiar timers si existe
-      if (userToAdmit.userId && videoControl) {
-        videoControl.clearUserTimers(userToAdmit.userId);
-      }
-    } catch (err) {
-      console.error('❌ Error admit:', err);
-    }
+  const addWaitingUsers = (users) => {
+    setWaitingUsers(prev => [...prev, ...users]);
   };
 
-  const addToWaitingRoom = (users) => {
-    setWaitingUsers(prev => [...prev, ...userUtils.toArray(users)]);
+  const removeWaitingUser = (userId) => {
+    setWaitingUsers(prev => prev.filter(user => 
+      user.userId !== userId && 
+      user.userGUID !== userId && 
+      user.userGuid !== userId
+    ));
+  };
+
+  const admitFirstWaitingUser = () => {
+    if (waitingUsers.length === 0) return null;
+    const userToAdmit = waitingUsers[0];
+    setWaitingUsers(prev => prev.slice(1));
+    return userToAdmit;
+  };
+
+  const clearWaitingRoom = () => {
+    setWaitingUsers([]);
   };
 
   return {
     waitingUsers,
-    setWaitingUsers,
-    admitFromWaitingRoom,
-    addToWaitingRoom
+    addWaitingUsers,
+    removeWaitingUser,
+    admitFirstWaitingUser,
+    clearWaitingRoom,
+    setWaitingUsers // Para compatibilidad temporal
   };
 };

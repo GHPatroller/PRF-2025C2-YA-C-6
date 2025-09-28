@@ -1,91 +1,94 @@
-import { useRef } from 'react';
-import { userUtils } from './utils/userUtils';
-import { timerUtils } from './utils/timerUtils';
+// src/hooks/useVideoControls.js
+import { useRef, useCallback } from 'react';
+import { TimerManager } from '../utils/timerUtils';
+import { isBool, shouldManageUser } from '../utils/userUtils';
 
 const GRACE_MS = 10_000;
 const STABILIZE_MS = 1200;
 
-export const useVideoControl = (clientRef, onUserHold) => {
-  const stabilizeTimersRef = useRef(new Map());
-  const graceTimersRef = useRef(new Map());
+export const useVideoControls = (clientRef, getRoster, callbacks) => {
+  const stabilizeTimersRef = useRef(new TimerManager());
+  const graceTimersRef = useRef(new TimerManager());
   const heldSetRef = useRef(new Set());
 
-  const holdOnce = async (user) => {
-    if (!userUtils.isRegularUser(user)) return;
-    if (heldSetRef.current.has(user.userId)) return;
+  const { onHoldUser, onClearTimers } = callbacks;
+
+  const clearAllTimers = useCallback((userId) => {
+    stabilizeTimersRef.current.clearTimer(userId);
+    graceTimersRef.current.clearTimer(userId);
+  }, []);
+
+  const putOnHold = useCallback(async (user) => {
+    if (!user?.userId || heldSetRef.current.has(user.userId)) return;
 
     try {
-      await clientRef.current.putOnHold(user.userId, true);
-      heldSetRef.current.add(user.userId);
-      console.log(`🚪 ${user.displayName || user.userId} a Waiting Room`);
       
-      if (onUserHold) onUserHold(user);
+      await callbacks.onPutOnHold?.(user);
+      heldSetRef.current.add(user.userId);
+      onHoldUser?.(user);
     } catch (err) {
       console.error('❌ Error putOnHold:', err);
+      throw err;
     } finally {
-      timerUtils.clearAllTimers(user.userId, stabilizeTimersRef.current, graceTimersRef.current);
+      clearAllTimers(user.userId);
     }
-  };
+  }, [callbacks.onPutOnHold, onHoldUser, clearAllTimers]);
 
-  const handleVideoState = (user) => {
-    if (!userUtils.isRegularUser(user)) return;
+  const handleVideoState = useCallback((user) => {
+    if (!shouldManageUser(user)) return;
 
     if (user.bVideoOn === true) {
-      timerUtils.clearAllTimers(user.userId, stabilizeTimersRef.current, graceTimersRef.current);
+      clearAllTimers(user.userId);
+      heldSetRef.current.delete(user.userId);
       return;
     }
 
-    if (!userUtils.isBool(user.bVideoOn)) {
-      if (!stabilizeTimersRef.current.has(user.userId)) {
-        timerUtils.createStabilizeTimer(
-          user.userId,
-          () => {
-            const fresh = userUtils.findUserFromPayload({ userId: user.userId }, clientRef) || user;
-            handleVideoState(fresh);
-          },
-          STABILIZE_MS,
-          stabilizeTimersRef.current
+    if (!isBool(user.bVideoOn)) {
+      // Estado indefinido -> estabilizar
+      if (!stabilizeTimersRef.current.hasTimer(user.userId)) {
+        stabilizeTimersRef.current.setTimer(user.userId, () => {
+          onClearTimers?.(user.userId);
+          const fresh = getRoster().find((u) => u.userId === user.userId) || user;
+          callbacks.onStabilized?.(fresh);
+        }, STABILIZE_MS);
+        
+        console.log(
+          `⏳ Esperando estado cámara de ${user.displayName || user.userId} (${STABILIZE_MS}ms)`
         );
-        console.log(`⏳ Esperando estado cámara de ${user.displayName || user.userId}`);
       }
       return;
     }
 
     // bVideoOn === false
-    if (!graceTimersRef.current.has(user.userId)) {
-      timerUtils.createGraceTimer(
-        user.userId,
-        async () => {
-          const fresh = userUtils.findUserFromPayload({ userId: user.userId }, clientRef) || user;
-          if (fresh?.bVideoOn === false) {
-            await holdOnce(fresh);
-            console.log(`⏱️ Grace agotado para ${fresh.displayName || fresh.userId}`);
-          } else {
-            console.log(`✅ ${fresh?.displayName || user.userId} encendió cámara a tiempo`);
-            timerUtils.clearAllTimers(user.userId, stabilizeTimersRef.current, graceTimersRef.current);
-          }
-        },
-        GRACE_MS,
-        graceTimersRef.current
+    if (!graceTimersRef.current.hasTimer(user.userId)) {
+      graceTimersRef.current.setTimer(user.userId, () => {
+        onClearTimers?.(user.userId);
+        const fresh = getRoster().find((u) => u.userId === user.userId) || user;
+        callbacks.onGraceEnd?.(fresh);
+      }, GRACE_MS);
+      
+      console.log(
+        `⏳ Grace ${GRACE_MS / 1000}s para ${user.displayName || user.userId} (cámara OFF)`
       );
-      console.log(`⏳ Grace ${GRACE_MS / 1000}s para ${user.displayName || user.userId}`);
     }
-  };
+  }, [clearAllTimers, getRoster, onClearTimers, callbacks]);
 
-  const clearUserTimers = (userId) => {
-    timerUtils.clearAllTimers(userId, stabilizeTimersRef.current, graceTimersRef.current);
+  const clearUserState = useCallback((userId) => {
+    clearAllTimers(userId);
     heldSetRef.current.delete(userId);
-  };
+  }, [clearAllTimers]);
 
-  const cleanup = () => {
-    timerUtils.clearAllTimersInMap(stabilizeTimersRef.current);
-    timerUtils.clearAllTimersInMap(graceTimersRef.current);
+  const cleanup = useCallback(() => {
+    stabilizeTimersRef.current.clearAll();
+    graceTimersRef.current.clearAll();
     heldSetRef.current.clear();
-  };
+  }, []);
 
   return {
     handleVideoState,
-    clearUserTimers,
-    cleanup
+    putOnHold,
+    clearUserState,
+    cleanup,
+    heldSet: heldSetRef.current
   };
 };
