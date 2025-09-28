@@ -11,6 +11,7 @@ export const zoomAPI = {
     console.log("Reunión creada:", data);
     console.log("Meeting ID:", data.id);
     console.log("Join URL:", data.join_url);
+    console.log("Meeting password:", data.password);
 
     return data;
   },

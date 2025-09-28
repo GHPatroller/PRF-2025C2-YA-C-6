@@ -7,14 +7,23 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// ⚠️ App Meeting SDK
-const SDK_KEY = "O8xU5oXLT0yz4HQwyQ0lQ";
-const SDK_SECRET = "Sjd0HoprCL6cEsF3ESthKbjoWTg4aAfh";
+//*⚠️ App Meeting SDK
+//const SDK_KEY = "O8xU5oXLT0yz4HQwyQ0lQ";
+//const SDK_SECRET = "Sjd0HoprCL6cEsF3ESthKbjoWTg4aAfh";
 
 // ⚠️ App OAuth / Server-to-Server
-const CLIENT_ID = "IKDeivxRVSgWS6xr1luXA";
-const CLIENT_SECRET = "n6kkHtexIEwTjWhONBV1hsUcmR5Xb3QM";
-const ACCOUNT_ID = "46hGg-fIT8SCYuukeAjZIg"; // tu account_id de Zoom
+//const CLIENT_ID = "IKDeivxRVSgWS6xr1luXA";
+//const CLIENT_SECRET = "n6kkHtexIEwTjWhONBV1hsUcmR5Xb3QM";
+//const ACCOUNT_ID = "46hGg-fIT8SCYuukeAjZIg"; // tu account_id de Zoom
+
+const SDK_KEY = "ivAxPv8jS2maS22Cbj6gpA";
+const SDK_SECRET = "Z8Sw5sOVl5QbN8Ol7PxGm1b0EonQScjj";
+
+// ⚠️ App OAuth / Server-to-Server
+const CLIENT_ID = "_v8HO5aMRpqjUTlf3bvMFw";
+const CLIENT_SECRET = "64q5oNh1Fj9NEC3NtZ7aVYPqtGkVnnnq";
+const ACCOUNT_ID = "rd0OvqylTK-FS-RoaTKWpw"; // tu account_id de Zoom
+
 
 // ------------------------------
 // 1️⃣ Crear reunión (OAuth)
