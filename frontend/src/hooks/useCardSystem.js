@@ -3,36 +3,44 @@ import { useRef, useCallback } from 'react';
 
 const MAX_YELLOWS = 3;
 
-export const useCardSystem = (clientRef, callbacks) => {
-  const yellowByKeyRef = useRef(new Map());
-  const redByKeyRef = useRef(new Set());
-  const nameToKeyRef = useRef(new Map());
-  const keyToLastUserIdRef = useRef(new Map());
+export const useCardSystem = (clientRef, callbacks = {}) => {
+  const yellowByKeyRef = useRef(new Map());   // key -> count
+  const redByKeyRef = useRef(new Set());      // set(keys)
+  const nameToKeyRef = useRef(new Map());     // displayName -> key
+  const keyToLastUserIdRef = useRef(new Map());// key -> last userId visto
 
   const { onSendNotice, onUserExpelled, onScoreboardUpdate } = callbacks;
 
-  const getUserKey = useCallback((user) => {
-    return user?.userId || user?.userID || user?.userGUID || user?.userGuid;
-  }, []);
+  // ✅ CLAVE ESTABLE
+  const getUserKey = useCallback((u) =>
+      u?.userGuid ||
+      u?.userGUID ||
+      u?.email ||
+      u?.userEmail ||
+      u?.userName ||
+      u?.displayName ||
+      u?.name ||
+      u?.userId, // fallback inestable
+  [], []);
 
-  const getNiceName = useCallback((user) => {
-    return user?.displayName || user?.userName || 'Usuario';
-  }, []);
+  const getNiceName = useCallback((u) =>
+    u?.displayName || u?.userName || u?.name || getUserKey(u) || "Usuario", [getUserKey]
+  );
 
-  const touchUserMapping = useCallback((user, context = "") => {
-    const key = getUserKey(user);
-    const name = getNiceName(user);
-    if (key && name) {
-      nameToKeyRef.current.set(name, key);
-      keyToLastUserIdRef.current.set(key, user?.userId);
-    }
+  const touchUserMapping = useCallback((u) => {
+    if (!u) return;
+    const key = getUserKey(u);
+    if (!key) return;
+    if (u?.userId) keyToLastUserIdRef.current.set(key, u.userId);
+    const name = getNiceName(u);
+    if (name && !nameToKeyRef.current.get(name)) nameToKeyRef.current.set(name, key);
   }, [getUserKey, getNiceName]);
 
-  const isRed = useCallback((key) => {
-    return redByKeyRef.current.has(key);
-  }, []);
+  const isRed = useCallback((key) => redByKeyRef.current.has(key), []);
 
   const addYellow = useCallback(async (user) => {
+    if (!user) return;
+    touchUserMapping(user);
     const key = getUserKey(user) || nameToKeyRef.current.get(getNiceName(user));
     if (!key) return;
 
@@ -44,11 +52,14 @@ export const useCardSystem = (clientRef, callbacks) => {
     onScoreboardUpdate?.();
 
     if (next >= MAX_YELLOWS) {
-      await escalateToRed(user);
+      await escalateToRed(user); // eslint-disable-line no-use-before-define
     }
-  }, [getUserKey, getNiceName, onSendNotice, onScoreboardUpdate]);
+  }, [getUserKey, getNiceName, touchUserMapping, onSendNotice, onScoreboardUpdate]);
 
   const escalateToRed = useCallback(async (user) => {
+    if (!user) return;
+    touchUserMapping(user);
+
     const key = getUserKey(user) || nameToKeyRef.current.get(getNiceName(user));
     if (!key) return;
 
@@ -56,26 +67,17 @@ export const useCardSystem = (clientRef, callbacks) => {
     await onSendNotice?.("red", user);
 
     const uid = keyToLastUserIdRef.current.get(key) || user?.userId;
-    
-    // Expulsar usuario
-    try { 
-      await clientRef.current?.expel?.(uid); 
-    } catch {}
-    
-    try { 
-      await clientRef.current?.putOnHold?.(uid, true); 
-    } catch {}
 
-    if (uid) {
-      onUserExpelled?.(uid);
-    }
+    try { await clientRef.current?.expel?.(uid); } catch {}
+    try { await clientRef.current?.putOnHold?.(uid, true); } catch {}
 
+    if (uid) onUserExpelled?.(uid);
     onScoreboardUpdate?.();
-  }, [getUserKey, getNiceName, onSendNotice, onUserExpelled, onScoreboardUpdate, clientRef]);
+  }, [getUserKey, getNiceName, touchUserMapping, onSendNotice, onUserExpelled, onScoreboardUpdate, clientRef]);
 
   const putOnHoldWithCards = useCallback(async (user) => {
     if (!user || user.isHost || user.isCohost) return;
-    touchUserMapping(user, "holdOnce");
+    touchUserMapping(user);
 
     const key = getUserKey(user) || nameToKeyRef.current.get(getNiceName(user));
     const uid = keyToLastUserIdRef.current.get(key) || user?.userId;
@@ -83,55 +85,50 @@ export const useCardSystem = (clientRef, callbacks) => {
 
     if (isRed(key)) {
       try {
-        await clientRef.current.putOnHold(uid, true);
+        await clientRef.current?.putOnHold?.(uid, true);
         await onSendNotice?.("red", user);
       } catch (err) {
         console.error("❌ Error putOnHold (red):", err);
       } finally {
-        onUserExpelled?.(uid);
         onScoreboardUpdate?.();
       }
       return;
     }
 
     try {
-      await clientRef.current.putOnHold(uid, true);
-      console.log(`🚪 ${getNiceName(user)} a Waiting Room`);
+      await clientRef.current?.putOnHold?.(uid, true);
       await addYellow(user);
       await onSendNotice?.("info", user);
     } catch (err) {
       console.error("❌ Error putOnHold:", err);
     } finally {
-      onUserExpelled?.(uid);
       onScoreboardUpdate?.();
     }
-  }, [getUserKey, getNiceName, touchUserMapping, isRed, addYellow, onSendNotice, onUserExpelled, onScoreboardUpdate, clientRef]);
+  }, [getUserKey, getNiceName, touchUserMapping, isRed, clientRef, addYellow, onSendNotice, onScoreboardUpdate]);
 
-  const getScoreboard = useCallback((roster) => {
-    return roster
+  const getScoreboard = useCallback((roster = []) => {
+    const rows = roster
       .filter((u) => !u.isHost && !u.isCohost)
       .map((u) => {
-        touchUserMapping(u, "score");
+        touchUserMapping(u);
         const key = getUserKey(u) || nameToKeyRef.current.get(getNiceName(u));
         return {
           id: key,
           name: getNiceName(u),
-          cam: u.bVideoOn === true ? "ON" : u.bVideoOn === false ? "OFF" : "N/D",
+          cam: u?.bVideoOn === true ? "ON" : u?.bVideoOn === false ? "OFF" : "N/D",
           yellows: yellowByKeyRef.current.get(key) || 0,
           red: redByKeyRef.current.has(key),
         };
       })
       .sort((a, b) => (b.red - a.red) || (b.yellows - a.yellows));
+    return rows;
   }, [getUserKey, getNiceName, touchUserMapping]);
 
-  const resetCards = useCallback((userId) => {
-    const key = getUserKey({ userId });
-    if (key) {
-      yellowByKeyRef.current.delete(key);
-      redByKeyRef.current.delete(key);
-      onScoreboardUpdate?.();
-    }
-  }, [getUserKey, onScoreboardUpdate]);
+  const resetCards = useCallback(() => {
+    yellowByKeyRef.current.clear();
+    redByKeyRef.current.clear();
+    onScoreboardUpdate?.();
+  }, [onScoreboardUpdate]);
 
   return {
     addYellow,
@@ -141,6 +138,8 @@ export const useCardSystem = (clientRef, callbacks) => {
     resetCards,
     isRed,
     yellowByKey: yellowByKeyRef.current,
-    redByKey: redByKeyRef.current
+    redByKey: redByKeyRef.current,
+    nameToKeyRef: nameToKeyRef.current,
+    keyToLastUserIdRef: keyToLastUserIdRef.current,
   };
 };
