@@ -5,6 +5,7 @@ import { useWaitingRoom } from './useWaitingRoom';
 import { useVideoControls } from './useVideoControl';
 import { useMeetingActions } from './useMeetingActions';
 import { findUserFromPayload } from '../utils/userUtils'
+import { useCardSystem } from './useCardSystem';
 
 const GRACE_MS = 10_000;   // 10 seg gracia
 const STABILIZE_MS = 1200; // delay para que bVideoOn se estabilice
@@ -71,9 +72,25 @@ export const useUserManagement = (clientRef, opts = {}) => {
     }
   });
 
+  const cardSystem = useCardSystem(clientRef, {
+    onSendNotice: async (type, user, count) => {
+      // Aquí iría la lógica para enviar notificaciones al usuario
+      console.log(`📢 Notificación ${type} para ${user.displayName}`, count ? `(x${count})` : '');
+    },
+    onUserExpelled: (userId) => {
+      videoControls.clearUserState(userId);
+    },
+    onScoreboardUpdate: () => {
+      // Aquí actualizarías el estado del scoreboard en tu componente
+      console.log('📊 Scoreboard actualizado');
+    }
+  });
+
+
   const videoControls = useVideoControls(clientRef, getRoster, {
     onHoldUser: (user) => {
       console.log(`🚪 ${user.displayName || user.userId} a Waiting Room`);
+      cardSystem.putOnHoldWithCards(user);
     },
     onClearTimers: (userId) => {
       videoControls.clearUserState(userId);
@@ -85,14 +102,14 @@ export const useUserManagement = (clientRef, opts = {}) => {
     onGraceEnd: async (user) => {
       if (pausedRef.current) return;
       if (user?.bVideoOn === false) {
-        await videoControls.putOnHold(user);
+        await cardSystem.putOnHoldWithCards(user);
         console.log(`⏱️ Grace agotado (${GRACE_MS / 1000}s) para ${user.displayName || user.userId}`);
       } else {
         console.log(`✅ ${user?.displayName || user.userId} encendió cámara a tiempo`);
         videoControls.clearUserState(user.userId);
       }
     },
-    onPutOnHold: meetingActions.sendToWaitingRoom,
+    onPutOnHold: cardSystem.putOnHoldWithCards,
     // AÑADIR callback para pausar/reanudar
     onPauseStateChange: (paused) => {
       pausedRef.current = paused;
@@ -148,6 +165,10 @@ export const useUserManagement = (clientRef, opts = {}) => {
     createAndJoinMeeting,
     admitOnHold,
     sendToOnHold,
-    handleVideoState: videoControls.handleVideoState
+    handleVideoState: videoControls.handleVideoState,
+    getScoreboard: cardSystem.getScoreboard,
+    addYellow: cardSystem.addYellow,
+    resetCards: cardSystem.resetCards,
+    cardSystem
   };
 };
