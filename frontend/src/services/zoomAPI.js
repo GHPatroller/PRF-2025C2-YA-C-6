@@ -6,7 +6,13 @@ export const zoomAPI = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
     });
-    return response.json();
+    const data = await response.json();
+
+    console.log("Reunión creada:", data);
+    console.log("Meeting ID:", data.id);
+    console.log("Join URL:", data.join_url);
+
+    return data;
   },
 
   getSignature: async (meetingNumber, role = 1) => {
@@ -15,6 +21,9 @@ export const zoomAPI = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ meetingNumber, role }),
     });
-    return response.json();
+    const data = await response.json();
+
+    console.log("📌 Firma generada:", data);
+    return data;
   }
 };

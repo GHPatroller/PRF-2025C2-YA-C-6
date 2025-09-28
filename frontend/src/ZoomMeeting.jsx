@@ -1,36 +1,39 @@
-import React, { useEffect, useRef, useState } from "react";
-import ZoomMtgEmbedded from "@zoom/meetingsdk/embedded";
-import { Button } from "./components/ui/button/Button";
+import React, { useRef, useState } from "react";
 import { useZoomClient } from "./hooks/useZoomClient";
 import { useUserManagement } from "./hooks/useUserManagement";
 import { MeetingControls } from "./components/features/meeting/MeetingControls";
 
-
-const GRACE_MS = 10_000;   // 10 seg gracia
-const STABILIZE_MS = 1200; // delay para que bVideoOn se estabilice
-const POLL_MS = 1000;      // frecuencia del poll del roster
-
 export default function ZoomMeeting() {
   const zoomRef = useRef(null);
   const clientRef = useZoomClient(zoomRef);
-  const { waitingUsers, createAndJoinMeeting, admitOnHold, sendToOnHold } = useUserManagement(clientRef);
+
+  const [isRecreo, setIsRecreo] = useState(false);
+
+  const {
+    waitingUsers,
+    createAndJoinMeeting,
+    admitOnHold,
+    sendToOnHold,
+  } = useUserManagement(clientRef, { pauseCameraRule: isRecreo });
 
   return (
-    <div style={{ padding: "20px", textAlign: "center" }}>
+    <div style={{ padding: 20, textAlign: "center" }}>
       <h1>Zoom Embedded PoC</h1>
 
-      <MeetingControls 
+      <MeetingControls
         onCreateJoin={createAndJoinMeeting}
         onSendToWaiting={sendToOnHold}
         onAdmitFromWaiting={admitOnHold}
         waitingUsersCount={waitingUsers.length}
+        isRecreo={isRecreo}
+        onToggleRecreo={() => setIsRecreo((v) => !v)}
       />
 
       <div
         ref={zoomRef}
         style={{
-          width: "800px",
-          height: "450px",
+          width: 800,
+          height: 450,
           backgroundColor: "#000",
           margin: "20px auto 0",
         }}
@@ -38,4 +41,3 @@ export default function ZoomMeeting() {
     </div>
   );
 }
-

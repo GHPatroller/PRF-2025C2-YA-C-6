@@ -9,10 +9,14 @@ import { findUserFromPayload } from '../utils/userUtils'
 const GRACE_MS = 10_000;   // 10 seg gracia
 const STABILIZE_MS = 1200; // delay para que bVideoOn se estabilice
 
-export const useUserManagement = (clientRef) => {
+export const useUserManagement = (clientRef, opts = {}) => {
+  const { pauseCameraRule = false } = opts; 
   const waitingRoom = useWaitingRoom();
 
-const meetingActions = useMeetingActions(clientRef, {
+  // Referencia para pausar la regla (RECREO)
+  const pausedRef = useRef(false);
+
+  const meetingActions = useMeetingActions(clientRef, {
     onUserAdmitted: (user) => {
       console.log('✅ Admitido desde Waiting Room');
       waitingRoom.removeWaitingUser(user.userId || user.userGUID);
@@ -28,20 +32,25 @@ const meetingActions = useMeetingActions(clientRef, {
 
   const { getRoster } = useZoomEvents(clientRef, {
     onUserJoinWaiting: (users) => {
+      if (pausedRef.current) return;
       waitingRoom.addWaitingUsers(users);
       console.log('⏳ Waiting Room:', users);
     },
     onUserAdded: (items, roster) => {
       console.log('👤 Entró usuario(s):', items);
+      if (pausedRef.current) return;
+      
       for (const it of items) {
         const user = findUserFromPayload(roster, it);
         if (user) videoControls?.handleVideoState?.(user);
       }
       setTimeout(() => {
+        if (pausedRef.current) return;
         roster.forEach((u) => videoControls?.handleVideoState?.(u)); 
       }, STABILIZE_MS);
     },
     onUserUpdated: (items, roster) => {
+      if (pausedRef.current) return;
       for (const it of items) {
         const user = findUserFromPayload(roster, it) || it;
         if (!user) continue;
@@ -57,6 +66,7 @@ const meetingActions = useMeetingActions(clientRef, {
       }
     },
     onPoll: (roster) => {
+      if (pausedRef.current) return;
       for (const u of roster) videoControls?.handleVideoState?.(u);
     }
   });
@@ -69,9 +79,11 @@ const meetingActions = useMeetingActions(clientRef, {
       videoControls.clearUserState(userId);
     },
     onStabilized: (user) => {
+      if (pausedRef.current) return;
       videoControls.handleVideoState(user);
     },
     onGraceEnd: async (user) => {
+      if (pausedRef.current) return;
       if (user?.bVideoOn === false) {
         await videoControls.putOnHold(user);
         console.log(`⏱️ Grace agotado (${GRACE_MS / 1000}s) para ${user.displayName || user.userId}`);
@@ -80,14 +92,28 @@ const meetingActions = useMeetingActions(clientRef, {
         videoControls.clearUserState(user.userId);
       }
     },
-    onPutOnHold: meetingActions.sendToWaitingRoom
+    onPutOnHold: meetingActions.sendToWaitingRoom,
+    // AÑADIR callback para pausar/reanudar
+    onPauseStateChange: (paused) => {
+      pausedRef.current = paused;
+      if (paused) {
+        console.log("⏸️ Regla de cámara pausada (RECREO)");
+      } else {
+        console.log("▶️ Regla de cámara reanudada");
+      }
+    }
   });
+
+  // Efecto para manejar el RECREO
+  React.useEffect(() => {
+    videoControls?.setPaused?.(pauseCameraRule);
+  }, [pauseCameraRule, videoControls]);
 
   const updatedMeetingActions = useMeetingActions(clientRef, {
     onUserAdmitted: (user) => {
       console.log('✅ Admitido desde Waiting Room');
       waitingRoom.removeWaitingUser(user.userId || user.userGUID);
-      videoControls.clearUserState(user.userId); // <- AHORA SÍ existe
+      videoControls.clearUserState(user.userId);
     },
     onUserHeld: (user) => {
       console.log(`🚪 ${user.displayName || user.userId} enviado a Waiting Room`);
