@@ -84,11 +84,20 @@ export const useVideoControls = (clientRef, getRoster, callbacks) => {
     heldSetRef.current.clear();
   }, []);
 
+  const setPaused = useCallback((paused) => {
+  if (paused) {
+    stabilizeTimersRef.current.clearAll();
+    graceTimersRef.current.clearAll();
+  }
+  callbacks.onPauseStateChange?.(paused);
+}, [callbacks.onPauseStateChange]);
+
   return {
     handleVideoState,
     putOnHold,
     clearUserState,
     cleanup,
+    setPaused,
     heldSet: heldSetRef.current
   };
 };

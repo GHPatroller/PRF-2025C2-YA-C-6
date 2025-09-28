@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useRef, useEffect } from 'react';
 import { zoomAPI } from "../services/zoomAPI";
 import { useZoomEvents } from './useZoomEvents';
 import { useWaitingRoom } from './useWaitingRoom';
@@ -105,70 +105,43 @@ export const useUserManagement = (clientRef, opts = {}) => {
   });
 
   // Efecto para manejar el RECREO
-  React.useEffect(() => {
-    videoControls?.setPaused?.(pauseCameraRule);
-  }, [pauseCameraRule, videoControls]);
-
-  const updatedMeetingActions = useMeetingActions(clientRef, {
-    onUserAdmitted: (user) => {
-      console.log('✅ Admitido desde Waiting Room');
-      waitingRoom.removeWaitingUser(user.userId || user.userGUID);
-      videoControls.clearUserState(user.userId);
-    },
-    onUserHeld: (user) => {
-      console.log(`🚪 ${user.displayName || user.userId} enviado a Waiting Room`);
-    },
-    onMeetingCreated: (meetingInfo) => {
-      console.log('🎉 Reunión creada:', meetingInfo);
+  useEffect(() => {
+    pausedRef.current = pauseCameraRule;
+    if (pauseCameraRule) {
+      console.log("⏸️ Regla de cámara pausada (RECREO)");
+    } else {
+      console.log("▶️ Regla de cámara reanudada");
     }
-  });
+  }, [pauseCameraRule]);
 
   // acciones del host
-  const createAndJoinMeeting = updatedMeetingActions.createAndJoinMeeting;
+  const createAndJoinMeeting = meetingActions.createAndJoinMeeting;
 
   const admitOnHold = async () => {
-    const client = clientRef?.current;
-    if (!client) return;
-    if (!waitingRoom.waitingUsers.length) return console.log('❌ Sin usuarios en espera');
+  if (!waitingRoom.waitingUsers.length) {
+    console.log('❌ Sin usuarios en espera');
+    return;
+  }
 
-    const userToAdmit = waitingRoom.admitFirstWaitingUser();
-    if (!userToAdmit) return console.log('❌ No hay usuario para admitir');
-    const guidOrId = userToAdmit.userGuid || userToAdmit.userGUID || userToAdmit.userId;
-    if (!guidOrId) return console.log('❌ Falta userGuid/userId para admitir');
+  const userToAdmit = waitingRoom.admitFirstWaitingUser();
+  if (!userToAdmit) {
+    console.log('❌ No hay usuario para admitir');
+    return;
+  }
 
-    try {
-      await client.admit(guidOrId);
-      console.log('✅ Admitido desde Waiting Room');
-
-      if (userToAdmit.userId) {
-        videoControls.clearUserState(userToAdmit.userId);
-      } else {
-        setTimeout(() => {
-          const u = getRoster().find(
-            (x) =>
-              x.userGUID === userToAdmit.userGUID ||
-              x.userGuid === userToAdmit.userGuid
-          );
-          if (u?.userId) {
-            videoControls.clearUserState(u.userId); 
-          }
-        }, 800);
-      }
-    } catch (err) {
-      console.error('❌ Error admit:', err);
-    }
-  };
+  await meetingActions.admitUser(userToAdmit);
+};
 
   const sendToOnHold = async () => {
-    const client = clientRef?.current;
-    if (!client) return;
-
     const attendees = getRoster();
     const target = attendees.find((a) => !a.isHost && !a.isCohost) || attendees[0];
-    if (!target?.userId) return console.log('❌ No hay participante válido');
+    if (!target?.userId) {
+      console.log('❌ No hay participante válido');
+      return;
+    }
 
-    await videoControls.putOnHold(target); 
-  };
+  await meetingActions.sendToWaitingRoom(target);
+};
 
   return {
     waitingUsers: waitingRoom.waitingUsers,
