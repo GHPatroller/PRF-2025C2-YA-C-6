@@ -19,7 +19,7 @@ export default function ZoomMeeting() {
 
   return (
     <div style={{ padding: "20px", textAlign: "center" }}>
-      <h1>Zoom Embedded PoC</h1>
+      <h1>Zoom For Education</h1>
 
       <MeetingControls
         onCreateJoin={createAndJoinMeeting}
