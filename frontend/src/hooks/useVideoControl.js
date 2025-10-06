@@ -1,4 +1,3 @@
-// src/hooks/useVideoControls.js
 import { useRef, useCallback } from 'react';
 import { TimerManager } from '../utils/timerUtils';
 import { isBool, shouldManageUser } from '../utils/userUtils';

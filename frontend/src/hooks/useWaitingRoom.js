@@ -1,4 +1,3 @@
-// src/hooks/useWaitingRoom.js
 import { useState } from 'react';
 
 export const useWaitingRoom = () => {

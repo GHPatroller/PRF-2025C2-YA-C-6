@@ -4,7 +4,7 @@ import ZoomMeeting from "./ZoomMeeting.jsx";
 export default function App() {
   return (
     <div style={{ padding: "50px", fontFamily: "Arial" }}>
-      <h2>Zoom Web SDK PoC</h2>
+      <h2>Zoom For Education</h2>
       <ZoomMeeting />
     </div>
   );

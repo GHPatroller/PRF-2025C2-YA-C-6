@@ -7,26 +7,27 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-//*⚠️ App Meeting SDK
+
 //const SDK_KEY = "O8xU5oXLT0yz4HQwyQ0lQ";
 //const SDK_SECRET = "Sjd0HoprCL6cEsF3ESthKbjoWTg4aAfh";
 
-// ⚠️ App OAuth / Server-to-Server
+// App OAuth / Server-to-Server
 //const CLIENT_ID = "IKDeivxRVSgWS6xr1luXA";
 //const CLIENT_SECRET = "n6kkHtexIEwTjWhONBV1hsUcmR5Xb3QM";
-//const ACCOUNT_ID = "46hGg-fIT8SCYuukeAjZIg"; // tu account_id de Zoom
+//const ACCOUNT_ID = "46hGg-fIT8SCYuukeAjZIg"; 
 
+//App Meeting SDK
 const SDK_KEY = "ivAxPv8jS2maS22Cbj6gpA";
 const SDK_SECRET = "Z8Sw5sOVl5QbN8Ol7PxGm1b0EonQScjj";
 
-// ⚠️ App OAuth / Server-to-Server
+//App OAuth / Server-to-Server
 const CLIENT_ID = "_v8HO5aMRpqjUTlf3bvMFw";
 const CLIENT_SECRET = "64q5oNh1Fj9NEC3NtZ7aVYPqtGkVnnnq";
-const ACCOUNT_ID = "rd0OvqylTK-FS-RoaTKWpw"; // tu account_id de Zoom
+const ACCOUNT_ID = "rd0OvqylTK-FS-RoaTKWpw"; 
 
 
-// ------------------------------
-// 1️⃣ Crear reunión (OAuth)
+
+// Crear reunión (OAuth)
 app.post("/create-meeting", async (req, res) => {
   try {
     const tokenResponse = await axios.post(
@@ -58,9 +59,9 @@ app.post("/create-meeting", async (req, res) => {
 
     const z = meetingResponse.data;
 
-    // 🔁 Normalizamos lo que va al frontend (no mandes nada sensible)
+    
     res.json({
-      id: z.id,                       // número de reunión
+      id: z.id,                       
       uuid: z.uuid,
       topic: z.topic,
       join_url: z.join_url,
@@ -74,8 +75,8 @@ app.post("/create-meeting", async (req, res) => {
   }
 });
 
-// ------------------------------
-// 2️⃣ Generar signature (SDK)
+
+// Generar signature (SDK) — con appKey y clientId
 app.post("/get-signature", (req, res) => {
   const { meetingNumber, role } = req.body;
   if (!meetingNumber || role === undefined) {
@@ -83,13 +84,14 @@ app.post("/get-signature", (req, res) => {
   }
 
   try {
-    const iat = Math.floor(Date.now() / 1000);
+    const iat = Math.floor(Date.now() / 1000) - 30;
     const exp = iat + 60 * 60 * 2;
 
     const payload = {
-      sdkKey: SDK_KEY,   // ✅ usar sdkKey
+      appKey: SDK_KEY,                 
+      clientId: CLIENT_ID || undefined,
       mn: String(meetingNumber),
-      role: Number(role),
+      role: Number(role) || 1,
       iat,
       exp,
       tokenExp: exp,
@@ -102,6 +104,7 @@ app.post("/get-signature", (req, res) => {
     res.status(500).json({ error: "Error generando signature" });
   }
 });
+
 // ------------------------------
 app.listen(3000, () =>
   console.log("🚀 Backend corriendo en http://localhost:3000")

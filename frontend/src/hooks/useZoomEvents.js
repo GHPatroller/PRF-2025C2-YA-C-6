@@ -1,4 +1,3 @@
-// src/hooks/useZoomEvents.js (cambiar el nombre del archivo)
 import { useEffect, useRef } from 'react';
 import { toArray, findUserFromPayload } from '../utils/userUtils';
 

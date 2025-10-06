@@ -16,23 +16,19 @@ export const useUserManagement = (clientRef, opts = {}) => {
   const [scoreboard, setScoreboard] = useState([]);
   // RECREO
   const pausedRef = useRef(false);
-
-  const meetingActions = useMeetingActions(clientRef, {
+ const meetingActions = useMeetingActions(clientRef, {
     onUserAdmitted: (user) => {
       console.log('✅ Admitido desde Waiting Room');
       waitingRoom.removeWaitingUser(user.userId || user.userGUID);
       videoControls.clearUserState(user.userId);
-      // Refrescamos la tabla tras cambios de admisión
       setScoreboard(cardSystem.getScoreboard(getRoster()));
     },
     onUserHeld: (user) => {
-      console.log(`🚪 ${user.displayName || user.userId} enviado a Waiting Room`);
-      // También refrescamos
+      console.log(` ${user.displayName || user.userId} enviado a Waiting Room`);
       setScoreboard(cardSystem.getScoreboard(getRoster()));
     },
     onMeetingCreated: (meetingInfo) => {
-      console.log('🎉 Reunión creada:', meetingInfo);
-      // Inicial del scoreboard por si ya hay roster
+      console.log('Reunión creada:', meetingInfo);
       setScoreboard(cardSystem.getScoreboard(getRoster()));
     }
   });  
@@ -57,7 +53,6 @@ export const useUserManagement = (clientRef, opts = {}) => {
       setTimeout(() => {
         if (pausedRef.current) return;
         roster.forEach((u) => videoControls?.handleVideoState?.(u)); 
-        // ✅ Refrescamos la tabla luego de estabilizar
         setScoreboard(cardSystem.getScoreboard(getRoster()));
       }, STABILIZE_MS);
     },
@@ -69,7 +64,6 @@ export const useUserManagement = (clientRef, opts = {}) => {
         if (!user) continue;
         videoControls?.handleVideoState?.(user);
       }
-      // ✅ Cada update refleja en la UI
       setScoreboard(cardSystem.getScoreboard(getRoster()));
     },
 
@@ -80,39 +74,34 @@ export const useUserManagement = (clientRef, opts = {}) => {
           videoControls?.clearUserState?.(u.userId);
         }
       }
-      // ✅ Si se fue alguien, actualizamos la tabla
       setScoreboard(cardSystem.getScoreboard(getRoster()));
     },
 
     onPoll: (roster) => {
       if (pausedRef.current) return;
       for (const u of roster) videoControls?.handleVideoState?.(u);
-      // ✅ Cada tick del poll recalcula el scoreboard con el roster “fresco”
+      // recalcula el scoreboard con el roster fresco
       setScoreboard(cardSystem.getScoreboard(roster));
     }
   });
 
   const cardSystem = useCardSystem(clientRef, {
     onSendNotice: async (type, user, count) => {
-      console.log(`📢 Notificación ${type} para ${user.displayName}`, count ? `(x${count})` : '');
+      console.log(`Notificación ${type} para ${user.displayName}`, count ? `(x${count})` : '');
     },
     onUserExpelled: (userId) => {
       videoControls.clearUserState(userId);
     },
     onScoreboardUpdate: () => {
       const roster = getRoster();
-      console.log('📊 Scoreboard actualizado');
-      // ✅ Cuando el sistema de tarjetas cambie algo (amarilla/roja/hold),
-      //    recalculamos a partir del roster actual
       setScoreboard(cardSystem.getScoreboard(roster));
     }
   });
 
   const videoControls = useVideoControls(clientRef, getRoster, {
     onHoldUser: (user) => {
-      console.log(`🚪 ${user.displayName || user.userId} a Waiting Room`);
+      console.log(` ${user.displayName || user.userId} a Waiting Room`);
       cardSystem.putOnHoldWithCards(user);
-      // El onScoreboardUpdate de cardSystem ya refresca, pero por las dudas:
       setScoreboard(cardSystem.getScoreboard(getRoster()));
     },
     onClearTimers: (userId) => {
@@ -141,7 +130,6 @@ export const useUserManagement = (clientRef, opts = {}) => {
         console.log("⏸️ Regla de cámara pausada (RECREO)");
       } else {
         console.log("▶️ Regla de cámara reanudada");
-        // Al reanudar, recalculamos todo
         setScoreboard(cardSystem.getScoreboard(getRoster()));
       }
     }
@@ -156,18 +144,15 @@ export const useUserManagement = (clientRef, opts = {}) => {
       console.log("▶️ Regla de cámara reanudada");
       setScoreboard(cardSystem.getScoreboard(getRoster()));
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pauseCameraRule]);
 
-  // Inicial del scoreboard cuando tengamos acceso al roster/cliente
+  
   useEffect(() => {
     setScoreboard(cardSystem.getScoreboard(getRoster()));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clientRef]); 
 
   // acciones del host
   const createAndJoinMeeting = meetingActions.createAndJoinMeeting;
-
   const admitOnHold = async () => {
     if (!waitingRoom.waitingUsers.length) {
       console.log('❌ Sin usuarios en espera');

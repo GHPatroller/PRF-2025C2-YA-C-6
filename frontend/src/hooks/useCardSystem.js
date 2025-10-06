@@ -1,4 +1,3 @@
-// src/hooks/useCardSystem.js
 import { useRef, useCallback } from 'react';
 
 const MAX_YELLOWS = 3;
@@ -11,7 +10,7 @@ export const useCardSystem = (clientRef, callbacks = {}) => {
 
   const { onSendNotice, onUserExpelled, onScoreboardUpdate } = callbacks;
 
-  // ✅ CLAVE ESTABLE
+
   const getUserKey = useCallback((u) =>
       u?.userGuid ||
       u?.userGUID ||
@@ -20,7 +19,7 @@ export const useCardSystem = (clientRef, callbacks = {}) => {
       u?.userName ||
       u?.displayName ||
       u?.name ||
-      u?.userId, // fallback inestable
+      u?.userId, // se resetea en la sala de espera
   [], []);
 
   const getNiceName = useCallback((u) =>

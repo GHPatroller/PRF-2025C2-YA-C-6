@@ -1,4 +1,3 @@
-// frontend/src/ZoomMeeting.jsx
 import React, { useRef, useState } from "react";
 import { useZoomClient } from "./hooks/useZoomClient";
 import { useUserManagement } from "./hooks/useUserManagement";
