@@ -27,6 +27,12 @@ export const MeetingControls = ({
         >
           Sacar de sala de espera ({waitingUsersCount})
         </Button>
+
+        <button
+          onClick={() => window.open('/scoreboard', '_blank', 'noopener,noreferrer')}
+>
+          Abrir Scoreboard
+        </button>
       </div>
 
       {/* Botón RECREO */}

@@ -21,15 +21,15 @@ export const useUserManagement = (clientRef, opts = {}) => {
       console.log('✅ Admitido desde Waiting Room');
       waitingRoom.removeWaitingUser(user.userId || user.userGUID);
       videoControls.clearUserState(user.userId);
-      setScoreboard(cardSystem.getScoreboard(getRoster()));
+     cardSystem.updatePresence(getRoster());
     },
     onUserHeld: (user) => {
       console.log(` ${user.displayName || user.userId} enviado a Waiting Room`);
-      setScoreboard(cardSystem.getScoreboard(getRoster()));
+     cardSystem.updatePresence(getRoster());
     },
     onMeetingCreated: (meetingInfo) => {
       console.log('Reunión creada:', meetingInfo);
-      setScoreboard(cardSystem.getScoreboard(getRoster()));
+      cardSystem.updatePresence(getRoster());
     }
   });  
 
@@ -53,7 +53,7 @@ export const useUserManagement = (clientRef, opts = {}) => {
       setTimeout(() => {
         if (pausedRef.current) return;
         roster.forEach((u) => videoControls?.handleVideoState?.(u)); 
-        setScoreboard(cardSystem.getScoreboard(getRoster()));
+        cardSystem.updatePresence(getRoster());
       }, STABILIZE_MS);
     },
 
@@ -64,7 +64,7 @@ export const useUserManagement = (clientRef, opts = {}) => {
         if (!user) continue;
         videoControls?.handleVideoState?.(user);
       }
-      setScoreboard(cardSystem.getScoreboard(getRoster()));
+     cardSystem.updatePresence(getRoster());
     },
 
     onUserRemoved: (items) => {
@@ -72,37 +72,62 @@ export const useUserManagement = (clientRef, opts = {}) => {
         const u = findUserFromPayload([], it) || it;
         if (u?.userId) {
           videoControls?.clearUserState?.(u.userId);
+           cardSystem.markLeft?.(u);
         }
       }
-      setScoreboard(cardSystem.getScoreboard(getRoster()));
     },
 
     onPoll: (roster) => {
       if (pausedRef.current) return;
       for (const u of roster) videoControls?.handleVideoState?.(u);
-      // recalcula el scoreboard con el roster fresco
-      setScoreboard(cardSystem.getScoreboard(roster));
+      cardSystem.updatePresence(roster);
     }
   });
+  
 
-  const cardSystem = useCardSystem(clientRef, {
-    onSendNotice: async (type, user, count) => {
-      console.log(`Notificación ${type} para ${user.displayName}`, count ? `(x${count})` : '');
-    },
-    onUserExpelled: (userId) => {
-      videoControls.clearUserState(userId);
-    },
-    onScoreboardUpdate: () => {
-      const roster = getRoster();
-      setScoreboard(cardSystem.getScoreboard(roster));
-    }
-  });
+
+const cardSystemRef = useRef(null);
+
+const rebuildScoreboard = () => {
+  try {
+    const roster =
+      clientRef.current?.getAllUser?.() ||
+      clientRef.current?.getAttendeeslist?.() ||
+      getRoster?.() ||
+      [];
+    const board = cardSystemRef.current?.getScoreboard
+      ? cardSystemRef.current.getScoreboard(roster)
+      : [];
+    setScoreboard(board);
+  } catch (e) {
+    console.warn("⚠️ Error rebuildScoreboard:", e);
+  }
+};
+
+
+
+const cardSystem = useCardSystem(clientRef, {
+  onSendNotice: async (type, user, count) => {
+    console.log(`Notificación ${type} para ${user.displayName}`, count ? `(x${count})` : "");
+  },
+  onUserExpelled: (userId) => {
+    videoControls.clearUserState(userId);
+  },
+  // 👇 Recibe las filas ya construidas desde CardSystem
+  onScoreboardUpdate: (rows) => {
+    setScoreboard(Array.isArray(rows) ? rows : []);
+  },
+});
+
+cardSystemRef.current = cardSystem;
+
+
+  
 
   const videoControls = useVideoControls(clientRef, getRoster, {
     onHoldUser: (user) => {
       console.log(` ${user.displayName || user.userId} a Waiting Room`);
       cardSystem.putOnHoldWithCards(user);
-      setScoreboard(cardSystem.getScoreboard(getRoster()));
     },
     onClearTimers: (userId) => {
       videoControls.clearUserState(userId);
@@ -110,7 +135,7 @@ export const useUserManagement = (clientRef, opts = {}) => {
     onStabilized: (user) => {
       if (pausedRef.current) return;
       videoControls.handleVideoState(user);
-      setScoreboard(cardSystem.getScoreboard(getRoster()));
+      cardSystem.updatePresence(getRoster());
     },
     onGraceEnd: async (user) => {
       if (pausedRef.current) return;
@@ -121,7 +146,6 @@ export const useUserManagement = (clientRef, opts = {}) => {
         console.log(`✅ ${user?.displayName || user.userId} encendió cámara a tiempo`);
         videoControls.clearUserState(user.userId);
       }
-      setScoreboard(cardSystem.getScoreboard(getRoster()));
     },
     onPutOnHold: cardSystem.putOnHoldWithCards,
     onPauseStateChange: (paused) => {
@@ -130,10 +154,12 @@ export const useUserManagement = (clientRef, opts = {}) => {
         console.log("⏸️ Regla de cámara pausada (RECREO)");
       } else {
         console.log("▶️ Regla de cámara reanudada");
-        setScoreboard(cardSystem.getScoreboard(getRoster()));
+         cardSystem.updatePresence(getRoster());
       }
     }
   });
+
+  
 
   // Efecto para manejar el RECREO desde prop externa
   useEffect(() => {
@@ -142,14 +168,56 @@ export const useUserManagement = (clientRef, opts = {}) => {
       console.log("⏸️ Regla de cámara pausada (RECREO)");
     } else {
       console.log("▶️ Regla de cámara reanudada");
-      setScoreboard(cardSystem.getScoreboard(getRoster()));
+     cardSystem.updatePresence(getRoster());
     }
   }, [pauseCameraRule]);
 
-  
   useEffect(() => {
-    setScoreboard(cardSystem.getScoreboard(getRoster()));
+  try {
+    localStorage.setItem('scoreboard', JSON.stringify(scoreboard));
+    // Dispara un evento manual por si la otra pestaña quiere reaccionar
+    window.dispatchEvent(new Event('scoreboard-updated'));
+  } catch (e) {
+    console.warn('No se pudo persistir scoreboard', e);
+  }
+
+}, [scoreboard]);
+  useEffect(() => {
+    cardSystem.updatePresence(getRoster());
   }, [clientRef]); 
+
+  
+const recordYellow = (user) => {
+  if (!user) return;
+  setScoreboard((prev) => {
+    const next = Array.isArray(prev) ? [...prev] : [];
+    const id = user.userId ?? user.id ?? user.uid ?? user.participantId;
+    const name = user.displayName ?? user.name ?? user.userName ?? "Desconocido";
+
+    let i = next.findIndex(r => r.id === id);
+    if (i === -1) {
+      next.push({
+        id,
+        name,
+        cam: user.bVideoOn ? "ON" : "OFF",
+        yellows: 0,
+        red: false,
+        points: 0,
+        lastEvent: null,
+      });
+      i = next.length - 1;
+    }
+
+    const row = { ...next[i] };
+    row.yellows = (row.yellows ?? 0) + 1;
+    row.points = (row.points ?? 0) + 1;        
+    row.lastEvent = `Yellow - ${new Date().toLocaleTimeString()}`;
+
+    next[i] = row;
+    return next;
+  });
+};
+
 
   // acciones del host
   const createAndJoinMeeting = meetingActions.createAndJoinMeeting;
@@ -166,7 +234,7 @@ export const useUserManagement = (clientRef, opts = {}) => {
     }
 
     await meetingActions.admitUser(userToAdmit);
-    setScoreboard(cardSystem.getScoreboard(getRoster()));
+     cardSystem.updatePresence(getRoster());
   };
 
   const sendToOnHold = async () => {
@@ -177,7 +245,7 @@ export const useUserManagement = (clientRef, opts = {}) => {
       return;
     }
     await meetingActions.sendToWaitingRoom(target);
-    setScoreboard(cardSystem.getScoreboard(getRoster()));
+     cardSystem.updatePresence(getRoster());
   };
 
   return {
@@ -190,6 +258,7 @@ export const useUserManagement = (clientRef, opts = {}) => {
     addYellow: cardSystem.addYellow,
     resetCards: cardSystem.resetCards,
     cardSystem,
-    scoreboard
+    scoreboard,
+    recordYellow
   };
 };
