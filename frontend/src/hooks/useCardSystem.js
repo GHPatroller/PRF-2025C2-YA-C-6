@@ -165,14 +165,22 @@ const markLeft = useCallback((u) => {
       return;
     }
 
-    try {
-      await clientRef.current?.putOnHold?.(uid, true);
-    } catch (err) {
-      console.warn("⚠️ No se pudo poner en espera:", err?.message || err);
-    }
+   let holdOk = false;
 
-    await addYellow(user);         
-    await onSendNotice?.("info", user);
+try {
+  await clientRef.current?.putOnHold?.(uid, true);
+  holdOk = true;
+} catch (err) {
+}
+
+if (holdOk) {
+  await addYellow(user);             
+  await onSendNotice?.("info", user);
+  onScoreboardUpdate?.(buildScoreboard());
+} else {
+  console.log("🟨 (skip) no sumo amarilla porque falló putOnHold");
+}
+
     onScoreboardUpdate?.(buildScoreboard());
 
   } finally {

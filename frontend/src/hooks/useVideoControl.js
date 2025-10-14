@@ -18,20 +18,26 @@ export const useVideoControls = (clientRef, getRoster, callbacks) => {
   }, []);
 
   const putOnHold = useCallback(async (user) => {
-    if (!user?.userId || heldSetRef.current.has(user.userId)) return;
+  if (!user?.userId || heldSetRef.current.has(user.userId)) return false;
 
-    try {
-      
-      await callbacks.onPutOnHold?.(user);
+  let ok = false;
+  try {
+    ok = await callbacks.onPutOnHold?.(user);
+    if (ok === true) {
       heldSetRef.current.add(user.userId);
       onHoldUser?.(user);
-    } catch (err) {
-      console.error('❌ Error putOnHold:', err);
-      throw err;
-    } finally {
-      clearAllTimers(user.userId);
+    } else {
+      console.warn('⏭️ No se marcó en espera porque onPutOnHold() no tuvo éxito');
     }
-  }, [callbacks.onPutOnHold, onHoldUser, clearAllTimers]);
+    return ok;
+  } catch (err) {
+    console.error('❌ Error putOnHold:', err);
+    return false;
+  } finally {
+    clearAllTimers(user.userId);
+  }
+}, [callbacks.onPutOnHold, onHoldUser, clearAllTimers]);
+
 
   const handleVideoState = useCallback((user) => {
     if (!shouldManageUser(user)) return;
