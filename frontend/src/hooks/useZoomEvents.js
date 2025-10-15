@@ -53,8 +53,8 @@ export const useZoomEvents = (clientRef, callbacks) => {
     client.on('user-added', handleUserAdded);
     client.on('user-updated', handleUserUpdated);
     client.on?.('onUserVideoStatusChange', handleUserUpdated);
+    client.on?.('onUserAudioStatusChange', handleUserUpdated);
 
-    
     client.on?.('user-removed', handleUserRemoved);
     // client.on?.('user-left', handleUserRemoved);
     // client.on?.('user-left-meeting', handleUserRemoved);
@@ -73,6 +73,7 @@ export const useZoomEvents = (clientRef, callbacks) => {
         client.off?.('user-updated', handleUserUpdated);
         client.off?.('onUserVideoStatusChange', handleUserUpdated);
         client.off?.('user-removed', handleUserRemoved);
+        client.off?.('onUserAudioStatusChange', handleUserUpdated);
         // client.off?.('user-left', handleUserRemoved);
         // client.off?.('user-left-meeting', handleUserRemoved);
       } catch {}

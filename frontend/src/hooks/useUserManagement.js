@@ -46,13 +46,17 @@ export const useUserManagement = (clientRef, opts = {}) => {
       
       for (const it of items) {
         const user = findUserFromPayload(roster, it);
-        if (user) videoControls?.handleVideoState?.(user);
-      }
+        if (user){
+           videoControls?.handleVideoState?.(user);
+           videoControls?.handleAudioState?.(user);
+      }}
 
       // Damos un pequeño margen a que el SDK estabilice bVideoOn
       setTimeout(() => {
         if (pausedRef.current) return;
-        roster.forEach((u) => videoControls?.handleVideoState?.(u)); 
+        roster.forEach((u) => {
+         videoControls?.handleVideoState?.(u);
+         videoControls?.handleAudioState?.(u)});  
         cardSystem.updatePresence(getRoster());
       }, STABILIZE_MS);
     },
@@ -63,6 +67,7 @@ export const useUserManagement = (clientRef, opts = {}) => {
         const user = findUserFromPayload(roster, it) || it;
         if (!user) continue;
         videoControls?.handleVideoState?.(user);
+        videoControls?.handleAudioState?.(user);
       }
      cardSystem.updatePresence(getRoster());
     },
@@ -79,7 +84,10 @@ export const useUserManagement = (clientRef, opts = {}) => {
 
     onPoll: (roster) => {
       if (pausedRef.current) return;
-      for (const u of roster) videoControls?.handleVideoState?.(u);
+      for (const u of roster) {
+        videoControls?.handleVideoState?.(u);
+        videoControls?.handleAudioState?.(u);
+         }
       cardSystem.updatePresence(roster);
     }
   });
@@ -108,7 +116,7 @@ const rebuildScoreboard = () => {
 
 const cardSystem = useCardSystem(clientRef, {
   onSendNotice: async (type, user, count) => {
-    console.log(`Notificación ${type} para ${user.displayName}`, count ? `(x${count})` : "");
+    //console.log(`Notificación ${type} para ${user.displayName}`, count ? `(x${count})` : "");
   },
   onUserExpelled: (userId) => {
     videoControls.clearUserState(userId);
@@ -135,14 +143,18 @@ cardSystemRef.current = cardSystem;
     onStabilized: (user) => {
       if (pausedRef.current) return;
       videoControls.handleVideoState(user);
+      videoControls.handleAudioState(user); 
       cardSystem.updatePresence(getRoster());
     },
-    onGraceEnd: async (user) => {
+    onGraceEnd: async (user , reason) => {
       if (pausedRef.current) return;
-      if (user?.bVideoOn === false) {
+      if ( reason === 'cameraOff' && user?.bVideoOn === false) {
         await cardSystem.putOnHoldWithCards(user);
         console.log(`⏱️ Grace agotado (${GRACE_MS / 1000}s) para ${user.displayName || user.userId}`);
-      } else {
+      } else if (reason === 'micOff' ) {
+         await cardSystem.putOnHoldWithCards(user);
+         console.log(`⏱️ Grace agotado (${GRACE_MS / 1000}s) (mic OFF) para ${user.displayName || user.userId}`);
+       } else {
         console.log(`✅ ${user?.displayName || user.userId} encendió cámara a tiempo`);
         videoControls.clearUserState(user.userId);
       }

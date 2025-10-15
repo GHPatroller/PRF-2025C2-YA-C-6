@@ -69,7 +69,7 @@ const addYellow = useCallback(async (user) => {
   touchUserMapping(user);
   const key = getUserKey(user) || nameToKeyRef.current.get(getNiceName(user));
   if (!key) return;
-  //anti-duplicado por tiempo 
+  //anti duplicado por tiempo 
   const now = Date.now();
   const last = lastYellowAtRef.current.get(key) || 0;
   if (now - last < COOLDOWN_MS) {
