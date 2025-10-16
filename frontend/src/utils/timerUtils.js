@@ -1,32 +1,28 @@
 export class TimerManager {
   constructor() {
-    this.timers = new Map();
+    this.map = new Map();
   }
-
-  setTimer(key, callback, delay) {
+  setTimer(key, fn, ms) {
     this.clearTimer(key);
-    const timerId = setTimeout(() => {
-      this.timers.delete(key);
-      callback();
-    }, delay);
-    this.timers.set(key, timerId);
-    return timerId;
+    const id = setTimeout(() => {
+      this.map.delete(key);
+      try { fn?.(); } catch (e) { console.error(e); }
+    }, ms);
+    this.map.set(key, id);
+    return id;
   }
-
+  hasTimer(key) {
+    return this.map.has(key);
+  }
   clearTimer(key) {
-    const timerId = this.timers.get(key);
-    if (timerId) {
-      clearTimeout(timerId);
-      this.timers.delete(key);
+    const id = this.map.get(key);
+    if (id) {
+      clearTimeout(id);
+      this.map.delete(key);
     }
   }
-
   clearAll() {
-    this.timers.forEach((timerId) => clearTimeout(timerId));
-    this.timers.clear();
-  }
-
-  hasTimer(key) {
-    return this.timers.has(key);
+    for (const id of this.map.values()) clearTimeout(id);
+    this.map.clear();
   }
 }

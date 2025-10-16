@@ -5,11 +5,10 @@ import { isBool, shouldManageUser } from '../utils/userUtils';
 const GRACE_MS = 10_000;
 const STABILIZE_MS = 1200;
 
-const INCIDENT = {
+export const INCIDENT = {
   CAMERA_OFF: 'cameraOff',
   MIC_OFF: 'micOff',
 };
-
 
 function isMicOn(user) {
   const muted =
@@ -21,29 +20,40 @@ function isMicOn(user) {
 }
 
 export const useVideoControls = (clientRef, getRoster, callbacks) => {
-  // Timers para cámara
+  // Timers de cámara
   const stabilizeCamRef = useRef(new TimerManager());
   const graceCamRef = useRef(new TimerManager());
-  // Timers para micrófono
+  // Timers de mic
   const stabilizeMicRef = useRef(new TimerManager());
   const graceMicRef = useRef(new TimerManager());
 
   const heldSetRef = useRef(new Set());
-
   const { onHoldUser, onClearTimers } = callbacks;
 
   const clearAllTimers = useCallback((userId) => {
-    // cámara
     stabilizeCamRef.current.clearTimer(userId);
     graceCamRef.current.clearTimer(userId);
-    // mic
     stabilizeMicRef.current.clearTimer(userId);
     graceMicRef.current.clearTimer(userId);
   }, []);
 
+  // === Helpers para saber si debo mantener/ejecutar timers ===
+  const isInRoster = useCallback((id) => {
+    try {
+      const roster = getRoster?.() || [];
+      return roster.some(u => (u.userId ?? u.id ?? u.uid) === id);
+    } catch {
+      return false;
+    }
+  }, [getRoster]);
+
+  const isActiveParticipant = useCallback((id) => {
+    // Activo = sigue en roster y NO está en el set de held (waiting)
+    return !!id && isInRoster(id) && !heldSetRef.current.has(id);
+  }, [isInRoster]);
+
   const putOnHold = useCallback(async (user) => {
     if (!user?.userId || heldSetRef.current.has(user.userId)) return false;
-
     let ok = false;
     try {
       ok = await callbacks.onPutOnHold?.(user);
@@ -58,95 +68,107 @@ export const useVideoControls = (clientRef, getRoster, callbacks) => {
       console.error('❌ Error putOnHold:', err);
       return false;
     } finally {
-      clearAllTimers(user.userId);
+      clearAllTimers(user.userId); // cortar todo si fue a waiting
     }
   }, [callbacks.onPutOnHold, onHoldUser, clearAllTimers]);
 
   // ======== CÁMARA ========
-  const handleVideoState = useCallback((user) => {
+  const handleVideoState = useCallback((user, source = 'video') => {
+    if (source !== 'video') return;             // blindaje extra
     if (!shouldManageUser(user)) return;
 
-    if (user.bVideoOn === true) {
-      stabilizeCamRef.current.clearTimer(user.userId);
-      graceCamRef.current.clearTimer(user.userId);
+    const id = user.userId ?? user.id ?? user.uid;
+    // Si ya NO es participante activo (p. ej. fue a waiting), limpiar y salir
+    if (!isActiveParticipant(id)) {
+      clearAllTimers(id);
       return;
     }
 
-    if (!isBool(user.bVideoOn)) {
-      // Estado indefinido -> estabilizar
-      if (!stabilizeCamRef.current.hasTimer(user.userId)) {
+    if (user.bVideoOn === true || user.video?.on === true) {
+      stabilizeCamRef.current.clearTimer(id);
+      graceCamRef.current.clearTimer(id);
+      return;
+    }
+
+    const bVideoOn = (user.bVideoOn ?? user.video?.on);
+    // Estado inestable/desconocido -> estabilizar
+    if (!isBool(bVideoOn)) {
+      if (!stabilizeCamRef.current.hasTimer(id)) {
         stabilizeCamRef.current.setTimer(
-          user.userId,
+          id,
           () => {
-            onClearTimers?.(user.userId);
-            const fresh = getRoster().find((u) => u.userId === user.userId) || user;
+            // Revalidar al ejecutar el timer
+            if (!isActiveParticipant(id)) {
+              clearAllTimers(id);
+              return;
+            }
+            onClearTimers?.(id);
+            const fresh = getRoster().find((u) => (u.userId ?? u.id ?? u.uid) === id) || user;
             callbacks.onStabilized?.(fresh, INCIDENT.CAMERA_OFF);
           },
           STABILIZE_MS
         );
-        console.log(`⏳ Esperando estado cámara de ${user.displayName || user.userId} (${STABILIZE_MS}ms)`);
+        console.log(`⏳ Esperando estado cámara de ${user.displayName || id} (${STABILIZE_MS}ms)`);
       }
       return;
     }
 
-    //iniciar grace camara
-    if (!graceCamRef.current.hasTimer(user.userId)) {
+    // Cámara OFF -> iniciar grace cámara
+    if (!graceCamRef.current.hasTimer(id)) {
       graceCamRef.current.setTimer(
-        user.userId,
+        id,
         () => {
-          onClearTimers?.(user.userId);
-          const fresh = getRoster().find((u) => u.userId === user.userId) || user;
+          if (!isActiveParticipant(id)) {
+            clearAllTimers(id);
+            return;
+          }
+          onClearTimers?.(id);
+          const fresh = getRoster().find((u) => (u.userId ?? u.id ?? u.uid) === id) || user;
           callbacks.onGraceEnd?.(fresh, INCIDENT.CAMERA_OFF);
         },
         GRACE_MS
       );
-      console.log(`⏳ Grace ${GRACE_MS / 1000}s para ${user.displayName || user.userId} (cámara OFF)`);
+      console.log(`⏳ Grace ${GRACE_MS / 1000}s para ${user.displayName || id} (cámara OFF)`);
     }
-  }, [getRoster, onClearTimers, callbacks]);
+  }, [getRoster, onClearTimers, callbacks, isActiveParticipant, clearAllTimers]);
 
   // ======== MICRO ========
-  const handleAudioState = useCallback((user) => {
+  const handleAudioState = useCallback((user, source = 'audio') => {
+    if (source !== 'audio') return;            // blindaje extra
     if (!shouldManageUser(user)) return;
+
+    const id = user.userId ?? user.id ?? user.uid;
+    if (!isActiveParticipant(id)) {
+      clearAllTimers(id);
+      return;
+    }
 
     const micOn = isMicOn(user);
 
     if (micOn === true) {
-      stabilizeMicRef.current.clearTimer(user.userId);
-      graceMicRef.current.clearTimer(user.userId);
-      return;
-    }
-
-    // Muchos SDKs informan muted/no muted sin "indefinido"
-    if (!isBool(micOn)) {
-      if (!stabilizeMicRef.current.hasTimer(user.userId)) {
-        stabilizeMicRef.current.setTimer(
-          user.userId,
-          () => {
-            onClearTimers?.(user.userId);
-            const fresh = getRoster().find((u) => u.userId === user.userId) || user;
-            callbacks.onStabilized?.(fresh, INCIDENT.MIC_OFF);
-          },
-          STABILIZE_MS
-        );
-        console.log(`⏳ Esperando estado mic de ${user.displayName || user.userId} (${STABILIZE_MS}ms)`);
-      }
+      stabilizeMicRef.current.clearTimer(id);
+      graceMicRef.current.clearTimer(id);
       return;
     }
 
     // mic OFF -> iniciar grace mic
-    if (!graceMicRef.current.hasTimer(user.userId)) {
+    if (!graceMicRef.current.hasTimer(id)) {
       graceMicRef.current.setTimer(
-        user.userId,
+        id,
         () => {
-          onClearTimers?.(user.userId);
-          const fresh = getRoster().find((u) => u.userId === user.userId) || user;
+          if (!isActiveParticipant(id)) {
+            clearAllTimers(id);
+            return;
+          }
+          onClearTimers?.(id);
+          const fresh = getRoster().find((u) => (u.userId ?? u.id ?? u.uid) === id) || user;
           callbacks.onGraceEnd?.(fresh, INCIDENT.MIC_OFF);
         },
         GRACE_MS
       );
-      console.log(`⏳ Grace ${GRACE_MS / 1000}s para ${user.displayName || user.userId} (micrófono OFF)`);
+      console.log(`⏳ Grace ${GRACE_MS / 1000}s para ${user.displayName || id} (micrófono OFF)`);
     }
-  }, [getRoster, onClearTimers, callbacks]);
+  }, [getRoster, onClearTimers, callbacks, isActiveParticipant, clearAllTimers]);
 
   const clearUserState = useCallback((userId) => {
     clearAllTimers(userId);
@@ -173,11 +195,11 @@ export const useVideoControls = (clientRef, getRoster, callbacks) => {
 
   return {
     handleVideoState,
-    handleAudioState,          
+    handleAudioState,
     putOnHold,
     clearUserState,
     cleanup,
     setPaused,
-    heldSet: heldSetRef.current
+    heldSet: heldSetRef.current,
   };
 };

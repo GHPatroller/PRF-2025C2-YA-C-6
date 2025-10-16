@@ -3,9 +3,13 @@ import { useState } from 'react';
 export const useWaitingRoom = () => {
   const [waitingUsers, setWaitingUsers] = useState([]);
 
-  const addWaitingUsers = (users) => {
-    setWaitingUsers(prev => [...prev, ...users]);
-  };
+ const addWaitingUsers = (users) => {
+  setWaitingUsers(prev => {
+    const map = new Map(prev.map(u => [u.userId || u.userGUID, u]));
+    users.forEach(u => map.set(u.userId || u.userGUID, u));
+    return Array.from(map.values());
+  });
+};
 
   const removeWaitingUser = (userId) => {
     setWaitingUsers(prev => prev.filter(user => 

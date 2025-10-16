@@ -6,14 +6,12 @@ const POLL_MS = 1000;
 export const useZoomEvents = (clientRef, callbacks) => {
   const pollRef = useRef(null);
   const subscribedRef = useRef(false);       // evita doble suscripción
-  const cbsRef = useRef(callbacks);          //  callbacks actuales
-
+  const cbsRef = useRef(callbacks);          // callbacks actuales
 
   useEffect(() => {
     cbsRef.current = callbacks;
   }, [callbacks]);
 
-  
   const getRoster = useCallback(
     () => clientRef?.current?.getAttendeeslist?.() || [],
     [clientRef]
@@ -28,8 +26,11 @@ export const useZoomEvents = (clientRef, callbacks) => {
     cbsRef.current.onUserAdded?.(items, getRoster());
   }, [getRoster]);
 
-  const handleUserUpdated = useCallback((payload) => {
+  // ⚡ Nueva versión: permite diferenciar tipo
+  const handleUserUpdated = useCallback((payload, typeHint = 'generic') => {
     const items = toArray(payload);
+    // inyectamos el tipo (audio/video) para que el resto lo use
+    items.forEach(item => (item.__eventType = typeHint));
     cbsRef.current.onUserUpdated?.(items, getRoster());
   }, [getRoster]);
 
@@ -41,48 +42,39 @@ export const useZoomEvents = (clientRef, callbacks) => {
   useEffect(() => {
     const client = clientRef?.current;
     if (!client) return;
-
-    if (subscribedRef.current) {
-      // evita duplicado por StrictMode/HMR
-      return;
-    }
+    if (subscribedRef.current) return;
     subscribedRef.current = true;
 
-    // Suscripcion unica
+    // === Suscripciones ===
     client.on('onUserJoinWaitingRoom', onJoinWaiting);
     client.on('user-added', handleUserAdded);
-    client.on('user-updated', handleUserUpdated);
-    client.on?.('onUserVideoStatusChange', handleUserUpdated);
-    client.on?.('onUserAudioStatusChange', handleUserUpdated);
+    client.on('user-removed', handleUserRemoved);
+    client.on('user-updated', (p) => handleUserUpdated(p, 'generic'));
+    client.on?.('onUserVideoStatusChange', (p) => handleUserUpdated(p, 'video'));
+    client.on?.('onUserAudioStatusChange', (p) => handleUserUpdated(p, 'audio'));
 
-    client.on?.('user-removed', handleUserRemoved);
-    // client.on?.('user-left', handleUserRemoved);
-    // client.on?.('user-left-meeting', handleUserRemoved);
-
-    // Poll único
+    // === Poll ===
     if (!pollRef.current) {
       pollRef.current = setInterval(() => {
         cbsRef.current.onPoll?.(getRoster());
       }, POLL_MS);
     }
 
+    // === Cleanup ===
     return () => {
       try {
         client.off?.('onUserJoinWaitingRoom', onJoinWaiting);
         client.off?.('user-added', handleUserAdded);
-        client.off?.('user-updated', handleUserUpdated);
-        client.off?.('onUserVideoStatusChange', handleUserUpdated);
         client.off?.('user-removed', handleUserRemoved);
-        client.off?.('onUserAudioStatusChange', handleUserUpdated);
-        // client.off?.('user-left', handleUserRemoved);
-        // client.off?.('user-left-meeting', handleUserRemoved);
+        client.off?.('user-updated');
+        client.off?.('onUserVideoStatusChange');
+        client.off?.('onUserAudioStatusChange');
       } catch {}
-
       if (pollRef.current) {
         clearInterval(pollRef.current);
         pollRef.current = null;
       }
-      subscribedRef.current = false; 
+      subscribedRef.current = false;
     };
   }, [clientRef, onJoinWaiting, handleUserAdded, handleUserUpdated, handleUserRemoved, getRoster]);
 
