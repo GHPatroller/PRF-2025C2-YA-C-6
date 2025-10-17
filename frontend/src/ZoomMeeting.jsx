@@ -8,6 +8,7 @@ export default function ZoomMeeting() {
   const clientRef = useZoomClient(zoomRef);
 
   const [isRecreo, setIsRecreo] = useState(false);
+  const [isMicPaused, setIsMicPaused] = useState(false);
 
   const {
     waitingUsers,
@@ -15,7 +16,7 @@ export default function ZoomMeeting() {
     admitOnHold,
     sendToOnHold,
     scoreboard, 
-  } = useUserManagement(clientRef, { pauseCameraRule: isRecreo });
+  } = useUserManagement(clientRef, { pauseCameraRule: isRecreo , pauseMicRule: isMicPaused });
 
   return (
     <div style={{ padding: "20px", textAlign: "center" }}>
@@ -28,6 +29,8 @@ export default function ZoomMeeting() {
         waitingUsersCount={waitingUsers.length}
         isRecreo={isRecreo}
         onToggleRecreo={() => setIsRecreo((v) => !v)}
+        isMicPaused={isMicPaused}
+        onToggleMicPaused={() => setIsMicPaused(v => !v)}
       />
 
       <div

@@ -6,8 +6,10 @@ export const MeetingControls = ({
   onSendToWaiting, 
   onAdmitFromWaiting, 
   waitingUsersCount,
-  isRecreo = false,          
-  onToggleRecreo = () => {}  
+  isRecreo = false, 
+  isMicPaused = false,         
+  onToggleRecreo = () => {} , 
+  onToggleMicPaused = () => {}  
 }) => {
   return (
     <div>
@@ -51,6 +53,32 @@ export const MeetingControls = ({
           <strong>Recreo:</strong> la regla de cámara está pausada.
         </div>
       )}
+   
+
+    {/* Boton MIC */}
+      <div style={{ marginTop: 16 }}>
+        <Button
+          variant={isMicPaused ? 'warning' : 'secondary'}
+          onClick={onToggleMicPaused}
+          title={isMicPaused ? 'Reanudar regla de micrófono' : 'Pausar regla de micrófono'}
+        >
+          {isMicPaused ? 'Finalizar pausa de MIC' : 'Pausar regla de MIC'}
+        </Button>
+      </div>
+
+      {isMicPaused && (
+        <div
+          style={{
+            marginTop: 8,
+            padding: 8,
+            border: '1px dashed #e1b12c',
+            borderRadius: 8,
+          }}
+        >
+          <strong>Micrófono:</strong> la regla de micrófono está pausada.
+        </div>
+      )}
     </div>
+
   );
 };

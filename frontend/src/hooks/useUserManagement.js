@@ -11,58 +11,57 @@ const GRACE_MS = 10_000;
 const STABILIZE_MS = 1200; // delay para estabilizar bVideoOn
 
 export const useUserManagement = (clientRef, opts = {}) => {
-  const { pauseCameraRule = false } = opts; 
+  const { pauseCameraRule = false, pauseMicRule = false } = opts;
   const waitingRoom = useWaitingRoom();
   const [scoreboard, setScoreboard] = useState([]);
-  const pausedRef = useRef(false);
+  const pausedRef = useRef(false);      // pausa cámara
+  const pausedRefMic = useRef(false);   // pausa micrófono
 
-  // inicializamos useZoomEvents para obtener getRoster
+  const camActive = () => !pausedRef.current;
+  const micActive = () => !pausedRefMic.current;
+
+  // 🔹 useZoomEvents
   const { getRoster } = useZoomEvents(clientRef, {
     onUserJoinWaiting: (users) => {
-      if (pausedRef.current) return;
+      // La waiting room no depende de las reglas de cámara/mic
       waitingRoom.addWaitingUsers(users);
-      users.forEach(u => videoControls.clearUserState?.(u.userId))
+      users.forEach(u => videoControls.clearUserState?.(u.userId));
       console.log('⏳ Waiting Room:', users);
     },
 
     onUserAdded: (items, roster) => {
       console.log('👤 Entró usuario(s):', items);
-      if (pausedRef.current) return;
-
       for (const it of items) {
         const user = findUserFromPayload(roster, it);
         if (user) {
-          videoControls?.handleVideoState?.(user, 'video');
-          videoControls?.handleAudioState?.(user, 'audio');
+          if (camActive()) videoControls?.handleVideoState?.(user, 'video');
+          if (micActive()) videoControls?.handleAudioState?.(user, 'audio');
         }
       }
 
       setTimeout(() => {
-        if (pausedRef.current) return;
         const fresh = getRoster();
         for (const u of fresh) {
-          videoControls?.handleVideoState?.(u, 'video');
-          videoControls?.handleAudioState?.(u, 'audio');
+          if (camActive()) videoControls?.handleVideoState?.(u, 'video');
+          if (micActive()) videoControls?.handleAudioState?.(u, 'audio');
         }
         cardSystem.updatePresence(fresh);
       }, STABILIZE_MS);
     },
 
     onUserUpdated: (items, roster) => {
-      if (pausedRef.current) return;
-
       for (const it of items) {
         const type = it?.__eventType || 'generic';
         const user = findUserFromPayload(roster, it) || it;
         if (!user) continue;
 
         if (type === 'audio') {
-          videoControls?.handleAudioState?.(user, 'audio');
+          if (micActive()) videoControls?.handleAudioState?.(user, 'audio');
         } else if (type === 'video') {
-          videoControls?.handleVideoState?.(user, 'video');
+          if (camActive()) videoControls?.handleVideoState?.(user, 'video');
         } else {
-          videoControls?.handleVideoState?.(user, 'video');
-          videoControls?.handleAudioState?.(user, 'audio');
+          if (camActive()) videoControls?.handleVideoState?.(user, 'video');
+          if (micActive()) videoControls?.handleAudioState?.(user, 'audio');
         }
       }
       cardSystem.updatePresence(getRoster());
@@ -79,16 +78,15 @@ export const useUserManagement = (clientRef, opts = {}) => {
     },
 
     onPoll: (roster) => {
-      if (pausedRef.current) return;
       for (const u of roster) {
-        videoControls?.handleVideoState?.(u, 'video');
-        videoControls?.handleAudioState?.(u, 'audio');
+        if (camActive()) videoControls?.handleVideoState?.(u, 'video');
+        if (micActive()) videoControls?.handleAudioState?.(u, 'audio');
       }
       cardSystem.updatePresence(roster);
     }
   });
 
-  // 🔹 Luego todo lo que depende de getRoster
+  // 🔹 Card System
   const cardSystemRef = useRef(null);
   const cardSystem = useCardSystem(clientRef, {
     onSendNotice: async () => {},
@@ -113,6 +111,7 @@ export const useUserManagement = (clientRef, opts = {}) => {
     }
   };
 
+  // 🔹 Meeting Actions
   const meetingActions = useMeetingActions(clientRef, {
     onUserAdmitted: (user) => {
       console.log('✅ Admitido desde Waiting Room');
@@ -122,7 +121,7 @@ export const useUserManagement = (clientRef, opts = {}) => {
     },
     onUserHeld: (user) => {
       console.log(` ${user.displayName || user.userId} enviado a Waiting Room`);
-      videoControls.clearUserState?.(user.userId);//limpia timers si se manda a sala de espera
+      videoControls.clearUserState?.(user.userId);
       cardSystem.updatePresence(getRoster());
     },
     onMeetingCreated: (info) => {
@@ -131,6 +130,7 @@ export const useUserManagement = (clientRef, opts = {}) => {
     }
   });
 
+  // 🔹 Video Controls
   const videoControls = useVideoControls(clientRef, getRoster, {
     onHoldUser: (user) => {
       console.log(` ${user.displayName || user.userId} a Waiting Room`);
@@ -138,22 +138,27 @@ export const useUserManagement = (clientRef, opts = {}) => {
     },
     onClearTimers: (userId) => videoControls.clearUserState(userId),
     onStabilized: (user) => {
-      if (pausedRef.current) return;
-      videoControls.handleVideoState(user, 'video');
-      videoControls.handleAudioState(user, 'audio');
+      if (camActive()) videoControls.handleVideoState(user, 'video');
+      if (micActive()) videoControls.handleAudioState(user, 'audio');
       cardSystem.updatePresence(getRoster());
     },
     onGraceEnd: async (user, reason) => {
-      if (pausedRef.current) return;
-      if (reason === 'cameraOff' && user?.bVideoOn === false) {
-        await cardSystem.putOnHoldWithCards(user);
-        console.log(`⏱️ Grace agotado (${GRACE_MS / 1000}s) para ${user.displayName || user.userId}`);
-      } else if (reason === 'micOff') {
+      if (reason === 'cameraOff') {
+        if (!camActive()) return; // cámara pausada => no sanciona
+        if (user?.bVideoOn === false) {
+          await cardSystem.putOnHoldWithCards(user);
+          console.log(`⏱️ Grace agotado (${GRACE_MS / 1000}s) para ${user.displayName || user.userId}`);
+        } else {
+          console.log(`✅ ${user?.displayName || user.userId} encendió cámara a tiempo`);
+          videoControls.clearUserState(user.userId);
+        }
+        return;
+      }
+
+      if (reason === 'micOff') {
+        if (!micActive()) return; 
         await cardSystem.putOnHoldWithCards(user);
         console.log(`⏱️ Grace agotado (${GRACE_MS / 1000}s) (mic OFF) para ${user.displayName || user.userId}`);
-      } else {
-        console.log(`✅ ${user?.displayName || user.userId} encendió cámara a tiempo`);
-        videoControls.clearUserState(user.userId);
       }
     },
     onPutOnHold: cardSystem.putOnHoldWithCards,
@@ -168,7 +173,7 @@ export const useUserManagement = (clientRef, opts = {}) => {
     }
   });
 
-  // Efectos y utilidades
+  // 🔹 Efectos
   useEffect(() => {
     pausedRef.current = pauseCameraRule;
     if (pauseCameraRule) {
@@ -178,6 +183,16 @@ export const useUserManagement = (clientRef, opts = {}) => {
       cardSystem.updatePresence(getRoster());
     }
   }, [pauseCameraRule]);
+
+  useEffect(() => {
+    pausedRefMic.current = pauseMicRule;
+    if (pauseMicRule) {
+      console.log("⏸️ Regla de micrófono pausada (RECREO)");
+    } else {
+      console.log("▶️ Regla de micrófono reanudada");
+      cardSystem.updatePresence(getRoster());
+    }
+  }, [pauseMicRule]);
 
   useEffect(() => {
     try {
@@ -192,6 +207,7 @@ export const useUserManagement = (clientRef, opts = {}) => {
     cardSystem.updatePresence(getRoster());
   }, [clientRef]);
 
+  // 🔹 Otras funciones
   const recordYellow = (user) => {
     if (!user) return;
     setScoreboard((prev) => {
@@ -215,6 +231,7 @@ export const useUserManagement = (clientRef, opts = {}) => {
     });
   };
 
+  // 🔹 Meeting actions
   const createAndJoinMeeting = meetingActions.createAndJoinMeeting;
 
   const admitOnHold = async () => {
