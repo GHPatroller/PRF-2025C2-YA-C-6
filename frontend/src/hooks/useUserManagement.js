@@ -6,8 +6,9 @@ import { useVideoControls } from './useVideoControl';
 import { useMeetingActions } from './useMeetingActions';
 import { findUserFromPayload } from '../utils/userUtils';
 import { useCardSystem } from './useCardSystem';
+import { sendPrivateChat } from '../utils/chatUtils'; // ⬅️ NUEVO
 
-const GRACE_MS = 10_000;   
+const GRACE_MS = 10_000;
 const STABILIZE_MS = 1200; // delay para estabilizar bVideoOn
 
 export const useUserManagement = (clientRef, opts = {}) => {
@@ -20,19 +21,123 @@ export const useUserManagement = (clientRef, opts = {}) => {
   const camActive = () => !pausedRef.current;
   const micActive = () => !pausedRefMic.current;
 
-  // 🔹 useZoomEvents
+  // -----------------------------
+  // Card System (PRIMERO)
+  // -----------------------------
+  const cardSystemRef = useRef(null);
+
+  // Helper local para notificar amarilla por DM
+  const notifyYellow = async (userId, count, { rejoin = false } = {}) => {
+    if (!userId || count <= 0) return;
+    const base = `⚠️ Tienes ${count} tarjeta(s) amarilla(s). Enciende la cámara para evitar sanciones.`;
+    const suffix = rejoin ? ' (reingreso)' : '';
+    await sendPrivateChat(clientRef, userId, `${base}${suffix}`);
+  };
+
+  const cardSystem = useCardSystem(clientRef, {
+    onSendNotice: async () => {},
+    onUserExpelled: (userId) => videoControls?.clearUserState?.(userId),
+    onScoreboardUpdate: (rows) => setScoreboard(Array.isArray(rows) ? rows : []),
+    // Si tu useCardSystem dispara esto, mandamos DM inmediato
+    onYellow: ({ key, count }) => {
+      try {
+        const userId = cardSystemRef.current?.keyToLastUserIdRef?.get(key);
+        if (userId) notifyYellow(userId, count);
+      } catch (e) {
+        console.warn('onYellow->notify error', e);
+      }
+    },
+  });
+  cardSystemRef.current = cardSystem;
+
+  // Wrapper para addYellow: asegura DM incluso si onYellow no está cableado adentro
+  const addYellow = (target) => {
+    try {
+      // Invocamos la amarilla del sistema
+      cardSystem.addYellow?.(target);
+
+      // Resolución de key y userId para notificar
+      let userId = null;
+      let key = null;
+
+      if (target && typeof target === 'object') {
+        userId = target.userId ?? target.id ?? target.uid ?? target.participantId ?? null;
+        const displayName = target.displayName ?? target.name ?? target.userName;
+        key = cardSystem.nameToKeyRef?.get(displayName) || displayName || null;
+      }
+
+      // Si no vino objeto (ej. string key), intentamos usarlo como key
+      if (!key && typeof target === 'string') key = target;
+
+      // Si no tengo userId, intento desde el mapa key->lastUserId
+      if (!userId && key) {
+        userId = cardSystem.keyToLastUserIdRef?.get(key) ?? null;
+      }
+
+      // Obtenemos el conteo final tras sumar
+      const count =
+        (key && cardSystem.yellowByKey?.get(key)) ??
+        0;
+
+      if (userId && count > 0) {
+        notifyYellow(userId, count);
+      }
+    } catch (e) {
+      console.warn('addYellow wrapper error', e);
+    }
+  };
+
+  const rebuildScoreboard = () => {
+    try {
+      const roster =
+        clientRef.current?.getAllUser?.() ||
+        clientRef.current?.getAttendeeslist?.() ||
+        getRoster?.() ||
+        [];
+      const board = cardSystemRef.current?.getScoreboard
+        ? cardSystemRef.current.getScoreboard(roster)
+        : [];
+      setScoreboard(board);
+    } catch (e) {
+      console.warn("⚠️ Error rebuildScoreboard:", e);
+    }
+  };
+
+  // -----------------------------
+  // Zoom Events (DESPUÉS de cardSystem)
+  // -----------------------------
   const { getRoster } = useZoomEvents(clientRef, {
     onUserJoinWaiting: (users) => {
       // La waiting room no depende de las reglas de cámara/mic
       waitingRoom.addWaitingUsers(users);
-      users.forEach(u => videoControls.clearUserState?.(u.userId));
+      users.forEach(u => videoControls?.clearUserState?.(u.userId));
       console.log('⏳ Waiting Room:', users);
     },
 
     onUserAdded: (items, roster) => {
       console.log('👤 Entró usuario(s):', items);
       for (const it of items) {
-        const user = findUserFromPayload(roster, it);
+        const user = findUserFromPayload(roster, it) || it;
+        if (!user) continue;
+
+        // Mapeo key -> último userId visto (para poder DMs confiables)
+        try {
+          const displayName = user.displayName ?? user.name ?? user.userName;
+          if (displayName && user.userId) {
+            const key = cardSystem.nameToKeyRef?.get(displayName) || displayName;
+            cardSystem.keyToLastUserIdRef?.set(key, user.userId);
+
+            // Si tenía amarillas previas en esta sesión, reenviamos DM
+            const prevCount = cardSystem.yellowByKey?.get(key) ?? 0;
+            if (prevCount > 0) {
+              notifyYellow(user.userId, prevCount, { rejoin: true });
+            }
+          }
+        } catch (e) {
+          console.warn('onUserAdded->map key/userId error', e);
+        }
+
+        // Reaplicamos reglas
         if (user) {
           if (camActive()) videoControls?.handleVideoState?.(user, 'video');
           if (micActive()) videoControls?.handleAudioState?.(user, 'audio');
@@ -63,6 +168,15 @@ export const useUserManagement = (clientRef, opts = {}) => {
           if (camActive()) videoControls?.handleVideoState?.(user, 'video');
           if (micActive()) videoControls?.handleAudioState?.(user, 'audio');
         }
+
+        // Actualizamos key->userId si cambió
+        try {
+          const displayName = user.displayName ?? user.name ?? user.userName;
+          if (displayName && user.userId) {
+            const key = cardSystem.nameToKeyRef?.get(displayName) || displayName;
+            cardSystem.keyToLastUserIdRef?.set(key, user.userId);
+          }
+        } catch {}
       }
       cardSystem.updatePresence(getRoster());
     },
@@ -86,42 +200,19 @@ export const useUserManagement = (clientRef, opts = {}) => {
     }
   });
 
-  // 🔹 Card System
-  const cardSystemRef = useRef(null);
-  const cardSystem = useCardSystem(clientRef, {
-    onSendNotice: async () => {},
-    onUserExpelled: (userId) => videoControls.clearUserState(userId),
-    onScoreboardUpdate: (rows) => setScoreboard(Array.isArray(rows) ? rows : []),
-  });
-  cardSystemRef.current = cardSystem;
-
-  const rebuildScoreboard = () => {
-    try {
-      const roster =
-        clientRef.current?.getAllUser?.() ||
-        clientRef.current?.getAttendeeslist?.() ||
-        getRoster?.() ||
-        [];
-      const board = cardSystemRef.current?.getScoreboard
-        ? cardSystemRef.current.getScoreboard(roster)
-        : [];
-      setScoreboard(board);
-    } catch (e) {
-      console.warn("⚠️ Error rebuildScoreboard:", e);
-    }
-  };
-
-  // 🔹 Meeting Actions
+  // -----------------------------
+  // Meeting Actions
+  // -----------------------------
   const meetingActions = useMeetingActions(clientRef, {
     onUserAdmitted: (user) => {
       console.log('✅ Admitido desde Waiting Room');
       waitingRoom.removeWaitingUser(user.userId || user.userGUID);
-      videoControls.clearUserState(user.userId);
+      videoControls?.clearUserState?.(user.userId);
       cardSystem.updatePresence(getRoster());
     },
     onUserHeld: (user) => {
       console.log(` ${user.displayName || user.userId} enviado a Waiting Room`);
-      videoControls.clearUserState?.(user.userId);
+      videoControls?.clearUserState?.(user.userId);
       cardSystem.updatePresence(getRoster());
     },
     onMeetingCreated: (info) => {
@@ -130,7 +221,9 @@ export const useUserManagement = (clientRef, opts = {}) => {
     }
   });
 
-  // 🔹 Video Controls
+  // -----------------------------
+  // Video Controls
+  // -----------------------------
   const videoControls = useVideoControls(clientRef, getRoster, {
     onHoldUser: (user) => {
       console.log(` ${user.displayName || user.userId} a Waiting Room`);
@@ -156,7 +249,7 @@ export const useUserManagement = (clientRef, opts = {}) => {
       }
 
       if (reason === 'micOff') {
-        if (!micActive()) return; 
+        if (!micActive()) return;
         await cardSystem.putOnHoldWithCards(user);
         console.log(`⏱️ Grace agotado (${GRACE_MS / 1000}s) (mic OFF) para ${user.displayName || user.userId}`);
       }
@@ -173,7 +266,9 @@ export const useUserManagement = (clientRef, opts = {}) => {
     }
   });
 
-  // 🔹 Efectos
+  // -----------------------------
+  // Effects
+  // -----------------------------
   useEffect(() => {
     pausedRef.current = pauseCameraRule;
     if (pauseCameraRule) {
@@ -207,7 +302,9 @@ export const useUserManagement = (clientRef, opts = {}) => {
     cardSystem.updatePresence(getRoster());
   }, [clientRef]);
 
-  // 🔹 Otras funciones
+  // -----------------------------
+  // Funciones auxiliares
+  // -----------------------------
   const recordYellow = (user) => {
     if (!user) return;
     setScoreboard((prev) => {
@@ -231,7 +328,9 @@ export const useUserManagement = (clientRef, opts = {}) => {
     });
   };
 
-  // 🔹 Meeting actions
+  // -----------------------------
+  // Meeting actions shortcuts
+  // -----------------------------
   const createAndJoinMeeting = meetingActions.createAndJoinMeeting;
 
   const admitOnHold = async () => {
@@ -266,7 +365,7 @@ export const useUserManagement = (clientRef, opts = {}) => {
     sendToOnHold,
     handleVideoState: videoControls.handleVideoState,
     getScoreboard: cardSystem.getScoreboard,
-    addYellow: cardSystem.addYellow,
+    addYellow,
     resetCards: cardSystem.resetCards,
     cardSystem,
     scoreboard,
