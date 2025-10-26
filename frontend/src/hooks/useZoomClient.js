@@ -19,6 +19,7 @@ export const useZoomClient = (zoomRef) => {
           isResizable: true,
           viewSizes: { default: { width: 800, height: 450 } },
         },
+         meetingInfo: [], // vacio asi no muestra nada
       },
       success: () => console.log('✅ SDK inicializado'),
       error: (err) => console.error('❌ Error init:', err),
