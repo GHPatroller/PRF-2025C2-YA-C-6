@@ -28,7 +28,7 @@ export const useVideoControls = (clientRef, getRoster, callbacks) => {
   const graceMicRef = useRef(new TimerManager());
 
   const heldSetRef = useRef(new Set());
-  const { onHoldUser, onClearTimers } = callbacks;
+  const { onHoldUser, onClearTimers, onUserAlert} = callbacks;
 
   const clearAllTimers = useCallback((userId) => {
     stabilizeCamRef.current.clearTimer(userId);
@@ -115,6 +115,10 @@ export const useVideoControls = (clientRef, getRoster, callbacks) => {
 
     // Cámara OFF -> iniciar grace cámara
     if (!graceCamRef.current.hasTimer(id)) {
+        onUserAlert?.(user, INCIDENT.CAMERA_OFF, 
+      `⚠️ Has apagado la cámara. Serás enviado a sala de espera en ${GRACE_MS/1000} segundos si no la reactivas.`
+    );
+
       graceCamRef.current.setTimer(
         id,
         () => {
@@ -130,7 +134,7 @@ export const useVideoControls = (clientRef, getRoster, callbacks) => {
       );
       console.log(`⏳ Grace ${GRACE_MS / 1000}s para ${user.displayName || id} (cámara OFF)`);
     }
-  }, [getRoster, onClearTimers, callbacks, isActiveParticipant, clearAllTimers]);
+  }, [getRoster, onClearTimers, callbacks, isActiveParticipant, clearAllTimers, onUserAlert]);
 
   // ======== MICRO ========
   const handleAudioState = useCallback((user, source = 'audio') => {
@@ -153,6 +157,9 @@ export const useVideoControls = (clientRef, getRoster, callbacks) => {
 
     // mic OFF -> iniciar grace mic
     if (!graceMicRef.current.hasTimer(id)) {
+      onUserAlert?.(user, INCIDENT.MIC_OFF,
+      `🎤 Has silenciado el micrófono. Serás enviado a sala de espera en ${GRACE_MS/1000} segundos si no lo reactivas.`
+    );
       graceMicRef.current.setTimer(
         id,
         () => {
@@ -168,7 +175,7 @@ export const useVideoControls = (clientRef, getRoster, callbacks) => {
       );
       console.log(`⏳ Grace ${GRACE_MS / 1000}s para ${user.displayName || id} (micrófono OFF)`);
     }
-  }, [getRoster, onClearTimers, callbacks, isActiveParticipant, clearAllTimers]);
+  }, [getRoster, onClearTimers, callbacks, isActiveParticipant, clearAllTimers, onUserAlert]);
 
   const clearUserState = useCallback((userId) => {
     clearAllTimers(userId);

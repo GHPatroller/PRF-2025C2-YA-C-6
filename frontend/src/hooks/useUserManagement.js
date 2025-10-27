@@ -21,6 +21,16 @@ export const useUserManagement = (clientRef, opts = {}) => {
   const camActive = () => !pausedRef.current;
   const micActive = () => !pausedRefMic.current;
 
+  const sendAlertToUser = async (user, incidentType, message) => {
+    try {
+      // Usar tu sistema de chat privado existente
+      await sendPrivateChat(clientRef, user.userId, message);
+      console.log(`📢 Alerta enviada a ${user.displayName}: ${message}`);
+    } catch (error) {
+      console.warn('Error enviando alerta a usuario:', error);
+    }
+  };
+
   // -----------------------------
   // Card System (PRIMERO)
   // -----------------------------
@@ -263,7 +273,8 @@ export const useUserManagement = (clientRef, opts = {}) => {
         console.log("▶️ Regla de cámara reanudada");
         cardSystem.updatePresence(getRoster());
       }
-    }
+    },
+    onUserAlert: sendAlertToUser
   });
 
   // -----------------------------
