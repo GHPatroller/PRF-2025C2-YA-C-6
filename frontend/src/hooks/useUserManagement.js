@@ -25,7 +25,7 @@ export const useUserManagement = (clientRef, opts = {}) => {
     try {
       // Usar tu sistema de chat privado existente
       await sendPrivateChat(clientRef, user.userId, message);
-      console.log(`📢 Alerta enviada a ${user.displayName}: ${message}`);
+     // console.log(` Alerta enviada a ${user.displayName}: ${message}`);
     } catch (error) {
       console.warn('Error enviando alerta a usuario:', error);
     }
