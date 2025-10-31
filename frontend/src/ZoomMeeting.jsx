@@ -4,7 +4,6 @@ import { useUserManagement } from "./hooks/useUserManagement";
 import { MeetingControls } from "./components/features/meeting/MeetingControls";
 import { YellowCardOverlayLayer } from "./components/features/meeting/YellowCardOverlayLayer";
 
-
 export default function ZoomMeeting() {
   const zoomRef = useRef(null);
   const clientRef = useZoomClient(zoomRef);
@@ -17,48 +16,58 @@ export default function ZoomMeeting() {
     createAndJoinMeeting,
     admitOnHold,
     sendToOnHold,
-    scoreboard, 
-    cardSystem
-  } = useUserManagement(clientRef, { pauseCameraRule: isRecreo , pauseMicRule: isMicPaused });
+    scoreboard,
+    cardSystem,
+  } = useUserManagement(clientRef, {
+    pauseCameraRule: isRecreo,
+    pauseMicRule: isMicPaused,
+  });
 
-    // Devuelve el set de userIds con >=1 amarilla (lee refs internos del hook)
+  /** Devuelve Set de userIds con >=1 amarilla */
   const getYellowedUserIds = () => {
     try {
-      const set = new Set();
+      const result = new Set();
       const yMap = cardSystem?.yellowByKey || new Map();
-      const keyToUid = cardSystem?.keyToLastUserIdRef || new Map();
-      yMap.forEach((count, key) => {
+      const k2id = cardSystem?.keyToLastUserIdRef || new Map();
+
+      for (const [key, count] of yMap.entries()) {
         if (count > 0) {
-          const uid = keyToUid.get(key);
-          if (uid != null) set.add(String(uid));
+          const uid = k2id.get(key);
+          if (uid != null) result.add(String(uid));
         }
-      });
-      return set;
+      }
+      return result;
     } catch {
       return new Set();
     }
   };
 
   return (
-   <div style={{ padding: "20px", textAlign: "center" }}>
-      <h1>Zoom For Education</h1>
-
+    <div style={{ padding: 16 }}>
       <MeetingControls
         onCreateJoin={createAndJoinMeeting}
-        onSendToWaiting={sendToOnHold}
-        onAdmitFromWaiting={admitOnHold}
-        waitingUsersCount={waitingUsers.length}
+        onSendToWaiting={() => sendToOnHold()}
+        onAdmitFromWaiting={() => admitOnHold()}
+        waitingUsersCount={waitingUsers?.length || 0}
         isRecreo={isRecreo}
-        onToggleRecreo={() => setIsRecreo((v) => !v)}
         isMicPaused={isMicPaused}
-        onToggleMicPaused={() => setIsMicPaused(v => !v)}
+        onToggleRecreo={() => setIsRecreo((v) => !v)}
+        onToggleMicPaused={() => setIsMicPaused((v) => !v)}
       />
 
-            {/* Contenedor relativo: overlay se posiciona sobre el grid de Zoom */}
-      <div style={{ position: "relative", width: 800, height: 450, margin: "20px auto 0" }}>
+      {/* Contenedor relativo para overlay */}
+      <div
+        style={{
+          position: "relative",
+          width: 800,
+          height: 450,
+          margin: "20px auto 0",
+          background: "#000",
+        }}
+      >
         <div
           ref={zoomRef}
-          style={{ width: "100%", height: "100%", backgroundColor: "#000" }}
+          style={{ position: "absolute", inset: 0 }}
         />
         <YellowCardOverlayLayer
           zoomRootRef={zoomRef}

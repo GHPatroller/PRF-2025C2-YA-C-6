@@ -1,6 +1,5 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 
-// Throttle muy simple para no recalcular en cada micro-cambio
 const throttle = (fn, ms = 80) => {
   let last = 0, tid;
   return (...args) => {
@@ -14,140 +13,160 @@ const throttle = (fn, ms = 80) => {
   };
 };
 
-/**
- * Props:
- *  - zoomRootRef: ref al div donde inicializás Zoom (zoomAppRoot)
- *  - clientRef: ref del cliente Zoom (useZoomClient)
- *  - getYellowedUserIds: () => Set<string> con userIds que tienen amarilla (>0)
- *
- * Estrategia:
- *  1) Ubicamos los "tiles" de video dentro de zoomRoot por selectores heurísticos.
- *  2) Leemos sus bounding rects y dibujamos divs absolutos por arriba.
- *  3) Recalculamos en mutaciones, resize, eventos del SDK y cuando cambia el scoreboard.
- */
 export function YellowCardOverlayLayer({ zoomRootRef, clientRef, getYellowedUserIds }) {
-  const [markers, setMarkers] = useState([]);
-  const recompute = throttle(() => {
-    const root = zoomRootRef?.current;
-    if (!root) return;
+  const containerRef = useRef(null);
+  const [tiles, setTiles] = useState([]);
+  const [idToName, setIdToName] = useState(new Map());
+  const [nameToId, setNameToId] = useState(new Map());
+  const [hostId, setHostId] = useState(null);
 
-    // Heurística de selectores (ajustalo si Zoom cambia clases)
-    const selectors = [
-      '[data-participant-id]',
-      '.zmu-video-item',
-      '[class*="participant"][class*="video"]',
-    ];
+  // === REFRESH PARTICIPANTS FROM SDK ===
+  const refreshParticipants = useMemo(
+    () =>
+      throttle(() => {
+        const c = clientRef?.current;
+        if (!c) return;
+        try {
+          const users = c.getAllUser?.() || [];
+          const i2n = new Map();
+          const n2i = new Map();
+          for (const u of users) {
+            const id = String(u.userId);
+            const name = String(u.displayName || "").trim();
+            if (id) i2n.set(id, name);
+            if (name) n2i.set(name, id);
+          }
+          setIdToName(i2n);
+          setNameToId(n2i);
 
-    let tiles = [];
-    for (const sel of selectors) {
-      const found = Array.from(root.querySelectorAll(sel));
-      if (found.length) { tiles = found; break; }
+          const me = c.getCurrentUserInfo?.();
+          if (me?.userId != null) setHostId(String(me.userId));
+        } catch {}
+      }, 200),
+    [clientRef]
+  );
+
+  const yellowIds = useMemo(() => {
+    try { return getYellowedUserIds?.() || new Set(); } catch { return new Set(); }
+  }, [getYellowedUserIds]);
+
+  const yellowNames = useMemo(() => {
+    const s = new Set();
+    for (const uid of yellowIds) {
+      const name = idToName.get(String(uid));
+      if (name) s.add(name);
     }
+    return s;
+  }, [yellowIds, idToName]);
 
-    const yellowSet = (getYellowedUserIds?.() || new Set());
-    const rootRect = root.getBoundingClientRect();
-    const next = [];
+  // === RECOMPUTE TILE POSITIONS ===
+  const recompute = useMemo(
+    () =>
+      throttle(() => {
+        const root = zoomRootRef?.current;
+        const overlay = containerRef?.current;
+        if (!root || !overlay) return;
 
-    const getUserIdFromTile = (el) =>
-      el.getAttribute?.('data-participant-id') ||
-      el.dataset?.participantId ||
-      (el.__fakeId ||= `anon-${Math.random().toString(36).slice(2,7)}`);
+        const overlayRect = overlay.getBoundingClientRect();
 
-    tiles.forEach((el) => {
-      const uid = String(getUserIdFromTile(el));
-      if (!yellowSet.has(uid)) return;
+        // Los <li class="zoom-MultiListItem-root"> son contenedores de cada video/avatar
+        const nodes = Array.from(root.querySelectorAll("li.zoom-MultiListItem-root"));
 
-      const r = el.getBoundingClientRect();
-      const size = 24, pad = 8;
+        const list = nodes.map((el, idx) => {
+          const r = el.getBoundingClientRect();
+          const aria = el.getAttribute("aria-label") || "";
+          // ej: "Octavio Baccaro's Avatar" → extraemos el nombre antes del "'s Avatar"
+          const match = aria.match(/^(.+?)'s Avatar/i);
+          const displayName = match ? match[1].trim() : "";
 
-      next.push({
-        key: uid,
-        top: Math.max(0, r.top - rootRect.top + pad),
-        left: Math.max(0, r.left - rootRect.left + r.width - size - pad),
-        size
-      });
-    });
+          const userId = nameToId.get(displayName) || null;
 
-    setMarkers(next);
-  }, 80);
+          return {
+            key: userId || displayName || `tile-${idx}`,
+            userId,
+            displayName,
+            top: r.top - overlayRect.top,
+            left: r.left - overlayRect.left,
+            width: r.width,
+            height: r.height,
+          };
+        });
 
-  // Observá cambios de DOM y tamaño dentro del root de Zoom
+        setTiles(list);
+      }, 120),
+    [zoomRootRef, nameToId]
+  );
+
   useEffect(() => {
+    refreshParticipants();
+    recompute();
+
     const root = zoomRootRef?.current;
-    if (!root) return;
+    const mo = root ? new MutationObserver(() => { refreshParticipants(); recompute(); }) : null;
+    mo?.observe(root, { childList: true, subtree: true, attributes: true });
 
-    const mo = new MutationObserver(recompute);
-    mo.observe(root, { childList: true, subtree: true, attributes: true });
+    const ro = window.ResizeObserver ? new ResizeObserver(recompute) : null;
+    ro?.observe(root);
+    if (containerRef.current) ro?.observe(containerRef.current);
 
-    const ro = new ResizeObserver(recompute);
-    ro.observe(root);
+    return () => { mo?.disconnect(); ro?.disconnect(); };
+  }, [zoomRootRef, recompute, refreshParticipants]);
 
-    window.addEventListener('resize', recompute);
-    root.addEventListener('scroll', recompute, true);
+  useEffect(() => { refreshParticipants(); recompute(); }, [yellowIds, refreshParticipants, recompute]);
 
-    // Cuando se actualiza el scoreboard (lo dispara useUserManagement)
-    const onBoard = () => recompute();
-    window.addEventListener('scoreboard-updated', onBoard);
-
-    recompute();
-
-    return () => {
-      mo.disconnect();
-      ro.disconnect();
-      window.removeEventListener('resize', recompute);
-      root.removeEventListener('scroll', recompute, true);
-      window.removeEventListener('scoreboard-updated', onBoard);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [zoomRootRef?.current]);
-
-  // Volvé a calcular ante eventos relevantes del SDK
-  useEffect(() => {
-    const client = clientRef?.current;
-    if (!client) return;
-
-    const events = [
-      'user-added', 'user-removed', 'user-updated',
-      'video-active-change', 'active-speaker'
-    ];
-    const handler = () => recompute();
-
-    events.forEach(ev => client.on(ev, handler));
-    recompute();
-
-    return () => { events.forEach(ev => client.off(ev, handler)); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clientRef?.current]);
-
-  // Capa flotante por arriba del grid de Zoom
+  // === RENDER ===
   return (
     <div
-      style={{
-        position: 'absolute',
-        inset: 0,
-        pointerEvents: 'none',
-        zIndex: 9999
-      }}
-      aria-hidden
+      ref={containerRef}
+      style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 999999 }}
     >
-      {markers.map(m => (
-        <div
-          key={m.key}
-          title="Tarjeta amarilla"
-          style={{
-            position: 'absolute',
-            top: m.top,
-            left: m.left,
-            width: m.size,
-            height: m.size,
-            background: 'yellow',
-            border: '2px solid #000',
-            borderRadius: 4,
-            boxShadow: '0 0 0 1px rgba(0,0,0,.15)',
-            pointerEvents: 'none'
-          }}
-        />
-      ))}
+      {tiles.map((m, idx) => {
+        const isHost = hostId && m.userId && String(m.userId) === String(hostId);
+        const byId = !!m.userId && yellowIds.has(String(m.userId));
+        const byName = !!m.displayName && yellowNames.has(String(m.displayName));
+
+        const show = !isHost && (byId || byName);
+        if (!show) return null;
+
+        const size = Math.max(24, Math.min(48, Math.floor(m.width * 0.12)));
+        return (
+          <div
+            key={m.key || idx}
+            style={{
+              position: "absolute",
+              top: Math.max(0, m.top),
+              left: Math.max(0, m.left),
+              width: Math.max(0, m.width),
+              height: Math.max(0, m.height),
+              pointerEvents: "none",
+            }}
+            title={`Tarjeta amarilla: ${m.displayName || m.userId || ""}`}
+          >
+            <div
+              style={{
+                position: "absolute",
+                top: 8,
+                left: 8,
+                width: size,
+                height: size,
+                background: "yellow",
+                border: "2px solid #000",
+                borderRadius: 6,
+                boxShadow: "0 0 0 1px rgba(0,0,0,.15)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontWeight: 800,
+                fontSize: Math.max(12, Math.floor(size * 0.5)),
+              }}
+            >
+              ⚠️
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
+
+export default YellowCardOverlayLayer;
