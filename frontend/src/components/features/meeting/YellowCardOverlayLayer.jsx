@@ -1,171 +1,259 @@
+// src/components/features/meeting/YellowCardOverlayLayer.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
-const throttle = (fn, ms = 80) => {
+const MOUNT_AT_BODY = true;     // portal a <body> (evita clipping)
+const USE_FIXED_OVERLAY = true; // overlay fijo a viewport
+
+const throttle = (fn, ms = 120) => {
   let last = 0, tid;
   return (...args) => {
     const now = Date.now();
-    if (now - last >= ms) {
-      last = now; fn(...args);
-    } else {
-      clearTimeout(tid);
-      tid = setTimeout(() => { last = Date.now(); fn(...args); }, ms - (now - last));
-    }
+    if (now - last >= ms) { last = now; fn(...args); }
+    else { clearTimeout(tid); tid = setTimeout(() => { last = Date.now(); fn(...args); }, ms - (now - last)); }
   };
 };
 
-export function YellowCardOverlayLayer({ zoomRootRef, clientRef, getYellowedUserIds }) {
-  const containerRef = useRef(null);
-  const [tiles, setTiles] = useState([]);
+export function YellowCardOverlayLayer({ zoomRootRef, clientRef, getYellowedUserIds, yellowHash }) {
+  const hostRef = useRef(null);
+  const [mounted, setMounted] = useState(false);
+  const [tiles, setTiles] = useState([]); // {x,y,w,h,size,count}
+
   const [idToName, setIdToName] = useState(new Map());
   const [nameToId, setNameToId] = useState(new Map());
-  const [hostId, setHostId] = useState(null);
 
-  // === REFRESH PARTICIPANTS FROM SDK ===
-  const refreshParticipants = useMemo(
-    () =>
-      throttle(() => {
-        const c = clientRef?.current;
-        if (!c) return;
-        try {
-          const users = c.getAllUser?.() || [];
-          const i2n = new Map();
-          const n2i = new Map();
-          for (const u of users) {
-            const id = String(u.userId);
-            const name = String(u.displayName || "").trim();
-            if (id) i2n.set(id, name);
-            if (name) n2i.set(name, id);
-          }
-          setIdToName(i2n);
-          setNameToId(n2i);
-
-          const me = c.getCurrentUserInfo?.();
-          if (me?.userId != null) setHostId(String(me.userId));
-        } catch {}
-      }, 200),
-    [clientRef]
-  );
-
-  const yellowIds = useMemo(() => {
-    try { return getYellowedUserIds?.() || new Set(); } catch { return new Set(); }
-  }, [getYellowedUserIds]);
-
-  const yellowNames = useMemo(() => {
-    const s = new Set();
-    for (const uid of yellowIds) {
-      const name = idToName.get(String(uid));
-      if (name) s.add(name);
-    }
-    return s;
-  }, [yellowIds, idToName]);
-
-  // === RECOMPUTE TILE POSITIONS ===
-  const recompute = useMemo(
-    () =>
-      throttle(() => {
-        const root = zoomRootRef?.current;
-        const overlay = containerRef?.current;
-        if (!root || !overlay) return;
-
-        const overlayRect = overlay.getBoundingClientRect();
-
-        // Los <li class="zoom-MultiListItem-root"> son contenedores de cada video/avatar
-        const nodes = Array.from(root.querySelectorAll("li.zoom-MultiListItem-root"));
-
-        const list = nodes.map((el, idx) => {
-          const r = el.getBoundingClientRect();
-          const aria = el.getAttribute("aria-label") || "";
-          // ej: "Octavio Baccaro's Avatar" → extraemos el nombre antes del "'s Avatar"
-          const match = aria.match(/^(.+?)'s Avatar/i);
-          const displayName = match ? match[1].trim() : "";
-
-          const userId = nameToId.get(displayName) || null;
-
-          return {
-            key: userId || displayName || `tile-${idx}`,
-            userId,
-            displayName,
-            top: r.top - overlayRect.top,
-            left: r.left - overlayRect.left,
-            width: r.width,
-            height: r.height,
-          };
-        });
-
-        setTiles(list);
-      }, 120),
-    [zoomRootRef, nameToId]
-  );
-
+  // Mount host
   useEffect(() => {
-    refreshParticipants();
-    recompute();
-
     const root = zoomRootRef?.current;
-    const mo = root ? new MutationObserver(() => { refreshParticipants(); recompute(); }) : null;
-    mo?.observe(root, { childList: true, subtree: true, attributes: true });
+    if (!root) return;
+    const host = document.createElement("div");
+    host.id = "yellow-overlay-host";
+    host.style.position = USE_FIXED_OVERLAY ? "fixed" : "absolute";
+    host.style.inset = "0";
+    host.style.pointerEvents = "none";
+    host.style.zIndex = "2147483647";
+    host.style.overflow = "visible";
+    (MOUNT_AT_BODY ? document.body : root).appendChild(host);
+    hostRef.current = host;
+    setMounted(true);
+    return () => {
+      try { (MOUNT_AT_BODY ? document.body : root).removeChild(host); } catch {}
+      hostRef.current = null;
+      setMounted(false);
+    };
+  }, [zoomRootRef]);
 
-    const ro = window.ResizeObserver ? new ResizeObserver(recompute) : null;
-    ro?.observe(root);
-    if (containerRef.current) ro?.observe(containerRef.current);
+  // Helpers
+  const climbToTile = (node, maxHops = 8) => {
+    let cur = node;
+    for (let i = 0; i < maxHops && cur; i++) {
+      const rect = cur.getBoundingClientRect?.();
+      if (!rect) break;
+      const area = rect.width * rect.height;
+      const st = getComputedStyle(cur);
+      if (st.display !== "none" && st.visibility !== "hidden" && area > 10000) {
+        return { node: cur, rect };
+      }
+      cur = cur.parentElement;
+    }
+    return null;
+  };
 
-    return () => { mo?.disconnect(); ro?.disconnect(); };
-  }, [zoomRootRef, recompute, refreshParticipants]);
+  const findLabelNodeForName = (root, displayName) => {
+    const name = String(displayName || "").trim().toLowerCase();
+    if (!name) return null;
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT, {
+      acceptNode: (el) => {
+        const tag = el.tagName;
+        if (!tag || tag === "CANVAS" || tag === "VIDEO") return NodeFilter.FILTER_SKIP;
+        const text = el.textContent;
+        if (!text || text.length > 200) return NodeFilter.FILTER_SKIP;
+        return text.trim().toLowerCase().includes(name)
+          ? NodeFilter.FILTER_ACCEPT
+          : NodeFilter.FILTER_SKIP;
+      },
+    });
+    let node = walker.nextNode();
+    while (node) {
+      const st = getComputedStyle(node);
+      if (st.visibility !== "hidden" && st.display !== "none") return node;
+      node = walker.nextNode();
+    }
+    return null;
+  };
 
-  useEffect(() => { refreshParticipants(); recompute(); }, [yellowIds, refreshParticipants, recompute]);
+  // Roster
+  const refreshParticipants = useMemo(() => throttle(() => {
+    const c = clientRef?.current;
+    if (!c) return;
+    try {
+      const users = c.getAllUser?.() || c.getAttendeeslist?.() || [];
+      const i2n = new Map();
+      const n2i = new Map();
+      users.forEach(u => {
+        const uid = u?.userId ?? u?.userID ?? u?.id;
+        const name = u?.displayName ?? u?.userName ?? u?.name ?? "";
+        if (uid != null) {
+          i2n.set(String(uid), name);
+          if (name) n2i.set(String(name), String(uid));
+        }
+      });
+      setIdToName(i2n);
+      setNameToId(n2i);
+    } catch {}
+  }, 250), [clientRef]);
 
-  // === RENDER ===
-  return (
-    <div
-      ref={containerRef}
-      style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 999999 }}
-    >
-      {tiles.map((m, idx) => {
-        const isHost = hostId && m.userId && String(m.userId) === String(hostId);
-        const byId = !!m.userId && yellowIds.has(String(m.userId));
-        const byName = !!m.displayName && yellowNames.has(String(m.displayName));
+  // Tiles (usa Map id/name -> count)
+  const refreshTiles = useMemo(() => throttle(() => {
+    const root = zoomRootRef?.current;
+    const host = hostRef.current;
+    if (!root || !host) return;
 
-        const show = !isHost && (byId || byName);
-        if (!show) return null;
+    const idsMap = getYellowedUserIds?.() || new Map();     // Map<id|name, count>
+    const keysWanted = new Set(idsMap instanceof Map ? Array.from(idsMap.keys()).map(String) : []);
+    if (!keysWanted.size) { setTiles([]); return; }
 
-        const size = Math.max(24, Math.min(48, Math.floor(m.width * 0.12)));
+    const countFor = (key) => {
+      if (!(idsMap instanceof Map)) return 1;
+      const v = idsMap.get(key);
+      return Number.isFinite(v) ? v : 1;
+    };
+
+    const visualNodes = Array.from(root.querySelectorAll("canvas,video"));
+    const baseRect = { left: 0, top: 0 };
+    const scrollLeft = 0, scrollTop = 0;
+
+    const matches = [];
+
+    for (const vn of visualNodes) {
+      const climbed = climbToTile(vn);
+      if (!climbed) continue;
+      const { rect, node: tileNode } = climbed;
+
+      const candidates = [
+        tileNode.getAttribute?.("data-userid"),
+        tileNode.getAttribute?.("data-user-id"),
+        tileNode.getAttribute?.("data-username"),
+        tileNode.getAttribute?.("aria-label"),
+        vn.getAttribute?.("data-userid"),
+        vn.getAttribute?.("data-displayname"),
+      ].filter(Boolean).map(String);
+
+      let matchedKey = null;
+
+      for (const c of candidates) {
+        if (keysWanted.has(c)) { matchedKey = c; break; }
+        const idFromName = nameToId.get(c);
+        if (idFromName && keysWanted.has(idFromName)) { matchedKey = idFromName; break; }
+      }
+
+      if (matchedKey) {
+        const x = rect.left - baseRect.left + scrollLeft;
+        const y = rect.top  - baseRect.top  + scrollTop;
+        const w = rect.width, h = rect.height;
+        const size = Math.max(24, Math.min(w, h) * 0.25);
+        matches.push({ x, y, w, h, size, count: countFor(matchedKey) });
+      }
+    }
+
+    // Fallback por texto visible si no encontramos (raro pero útil)
+    if (!matches.length) {
+      for (const k of keysWanted) {
+        const name = idToName.get(String(k)) || String(k);
+        const label = findLabelNodeForName(root, name);
+        if (label) {
+          const climbed = climbToTile(label, 12);
+          if (climbed) {
+            const { rect } = climbed;
+            const x = rect.left - baseRect.left + scrollLeft;
+            const y = rect.top  - baseRect.top  + scrollTop;
+            const w = rect.width, h = rect.height;
+            const size = Math.max(24, Math.min(w, h) * 0.25);
+            matches.push({ x, y, w, h, size, count: countFor(k) });
+          }
+        }
+      }
+    }
+
+    setTiles(matches);
+  }, 200), [zoomRootRef, getYellowedUserIds, nameToId, idToName]);
+
+  // Subscriptions
+  useEffect(() => {
+    const c = clientRef?.current;
+    const root = zoomRootRef?.current;
+    if (!c || !root) return;
+
+    const handlers = [
+      ["user-added", refreshParticipants],
+      ["user-removed", refreshParticipants],
+      ["user-updated", refreshParticipants],
+      ["active-speaker", refreshTiles],
+      ["video-active-change", refreshTiles],
+      ["room-change", () => { refreshParticipants(); refreshTiles(); }],
+      ["meeting-status", () => { refreshParticipants(); refreshTiles(); }],
+    ];
+    handlers.forEach(([ev, fn]) => { try { c.on?.(ev, fn); } catch {} });
+
+    const ro = new ResizeObserver(refreshTiles);
+    try { ro.observe(root); } catch {}
+
+    const mo = new MutationObserver(refreshTiles);
+    try { mo.observe(root, { childList: true, subtree: true, attributes: true }); } catch {}
+
+    const onScroll = throttle(refreshTiles, 120);
+    root.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", refreshTiles);
+
+    refreshParticipants();
+    refreshTiles();
+
+    return () => {
+      try { ro.disconnect(); } catch {}
+      try { mo.disconnect(); } catch {}
+      try { root.removeEventListener("scroll", onScroll); } catch {}
+      try { window.removeEventListener("resize", refreshTiles); } catch {}
+      handlers.forEach(([ev, fn]) => { try { c.off?.(ev, fn); } catch {} });
+    };
+  }, [clientRef, zoomRootRef, refreshParticipants, refreshTiles, yellowHash]);
+
+  if (!mounted || !hostRef.current) return null;
+
+  return createPortal(
+    <div style={{ position: USE_FIXED_OVERLAY ? "fixed" : "absolute", inset: 0, pointerEvents: "none" }}>
+      {tiles.map(({ x, y, w, h, size, count }, i) => {
+        const badge = Math.max(1, Math.min(99, Number(count) || 1));
+        const label = badge > 9 ? "9+" : String(badge);
         return (
-          <div
-            key={m.key || idx}
-            style={{
-              position: "absolute",
-              top: Math.max(0, m.top),
-              left: Math.max(0, m.left),
-              width: Math.max(0, m.width),
-              height: Math.max(0, m.height),
-              pointerEvents: "none",
-            }}
-            title={`Tarjeta amarilla: ${m.displayName || m.userId || ""}`}
-          >
+          <div key={i} style={{ position: "absolute", left: Math.round(x), top: Math.round(y), width: Math.round(w), height: Math.round(h) }}>
             <div
               style={{
                 position: "absolute",
-                top: 8,
-                left: 8,
+                right: Math.max(4, Math.floor(size * 0.2)),
+                top: Math.max(4, Math.floor(size * 0.2)),
                 width: size,
                 height: size,
-                background: "yellow",
-                border: "2px solid #000",
-                borderRadius: 6,
-                boxShadow: "0 0 0 1px rgba(0,0,0,.15)",
+                borderRadius: Math.floor(size / 6),
+                background: "rgba(255, 204, 0, 0.95)", // amarillo
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                fontWeight: 800,
-                fontSize: Math.max(12, Math.floor(size * 0.5)),
+                fontWeight: 900,
+                fontSize: Math.max(12, Math.floor(size * 0.55)),
+                lineHeight: 1,
+                color: "#111",
+                textShadow: "0 1px 0 rgba(255,255,255,.35)",
+                boxShadow: "0 2px 10px rgba(0,0,0,.35)",
               }}
+              title={`Tarjetas amarillas: ${badge}`}
             >
-              ⚠️
+              {label}
             </div>
           </div>
         );
       })}
-    </div>
+    </div>,
+    hostRef.current
   );
 }
 

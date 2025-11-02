@@ -36,6 +36,15 @@ export const useCardSystem = (clientRef, callbacks = {}) => {
     [getUserKey]
   );
 
+  // devuelve un Set con las amarillas actuales
+  const getYellowedUserIds = useCallback(() => {
+    const keys = new Set();
+    yellowByKeyRef.current.forEach((count, key) => {
+      if (count > 0) keys.add(key);
+    });
+    return keys;
+  }, []);
+
   const buildScoreboard = useCallback(() => {
     const now = Date.now();
     const base = Array.from(nameToKeyRef.current.entries()).map(([name, key]) => {
@@ -238,6 +247,7 @@ export const useCardSystem = (clientRef, callbacks = {}) => {
     updatePresence,
     markSeen,
     markLeft,
+    getYellowedUserIds,
     yellowByKey: yellowByKeyRef.current,
     redByKey: redByKeyRef.current,
     nameToKeyRef: nameToKeyRef.current,

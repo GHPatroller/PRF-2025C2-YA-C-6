@@ -1,5 +1,6 @@
-import { useEffect, useRef } from 'react';
-import ZoomMtgEmbedded from '@zoom/meetingsdk/embedded';
+// frontend/src/hooks/useZoomClient.js
+import { useEffect, useRef } from "react";
+import ZoomMtgEmbedded from "@zoom/meetingsdk/embedded";
 
 export const useZoomClient = (zoomRef) => {
   const clientRef = useRef(null);
@@ -13,21 +14,19 @@ export const useZoomClient = (zoomRef) => {
     client.init({
       debug: true,
       zoomAppRoot: zoomRef.current,
-      language: 'es-ES',
+      language: "es-ES",
       customize: {
         video: {
-          isResizable: true,
+          isResizable: true,                    // ← CLAVE
           viewSizes: { default: { width: 800, height: 450 } },
         },
-         meetingInfo: [], // vacio asi no muestra nada
+        meetingInfo: [], // ok
       },
-      success: () => console.log('✅ SDK inicializado'),
-      error: (err) => console.error('❌ Error init:', err),
+      success: () => console.log("✅ SDK inicializado"),
+      error: (err) => console.error("❌ Error init:", err),
     });
 
-    return () => {
-      clientRef.current = null;
-    };
+    return () => { clientRef.current = null; };
   }, [zoomRef]);
 
   return clientRef;

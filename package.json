@@ -9,6 +9,7 @@
     "concurrently": "^8.2.2"
   },
   "dependencies": {
+    "@zoom/meetingsdk": "^4.0.7",
     "html2canvas": "^1.4.1",
     "jspdf": "^3.0.3",
     "react-router-dom": "^7.9.5"
