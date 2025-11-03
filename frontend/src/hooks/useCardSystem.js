@@ -5,16 +5,51 @@ const COOLDOWN_MS = 4000;        // ventana para ignorar duplicados
 const ACTIVE_WINDOW_MS = 30_000; // dentro de esto lo consideramos Activo
 
 export const useCardSystem = (clientRef, callbacks = {}) => {
+  // Estado principal
   const yellowByKeyRef = useRef(new Map());      // key -> count
   const redByKeyRef = useRef(new Set());         // set(keys)
   const nameToKeyRef = useRef(new Map());        // displayName -> key
-  const userIdToKeyRef = useRef(new Map());      // userId -> key (👈 nuevo)
+  const userIdToKeyRef = useRef(new Map());      // userId -> key
   const keyToLastUserIdRef = useRef(new Map());  // key -> último userId visto
   const inFlightRef = useRef(new Set());         // keys procesándose
   const lastYellowAtRef = useRef(new Map());     // key -> ts última amarilla
   const lastSeenAtRef = useRef(new Map());       // key -> ts último visto
 
-  // callbacks
+  // Persistencia
+  const persistKeyRef = useRef(null);
+  const savePersisted = useCallback(() => {
+    const k = persistKeyRef.current;
+    if (!k) return;
+    try {
+      const payload = {
+        yellow: Array.from(yellowByKeyRef.current.entries()),
+        red:    Array.from(redByKeyRef.current.values()),
+      };
+      localStorage.setItem(k, JSON.stringify(payload));
+    } catch {}
+  }, []);
+  const loadPersisted = useCallback((k) => {
+    try {
+      const raw = localStorage.getItem(k);
+      if (!raw) return;
+      const obj = JSON.parse(raw);
+      yellowByKeyRef.current = new Map(obj?.yellow || []);
+      redByKeyRef.current    = new Set(obj?.red || []);
+    } catch {}
+  }, []);
+  const clearPersisted = useCallback(() => {
+    const k = persistKeyRef.current;
+    if (!k) return;
+    try { localStorage.removeItem(k); } catch {}
+  }, []);
+  const enablePersistence = useCallback((meetingKey = "default") => {
+    const k = `cards:${String(meetingKey)}`;
+    persistKeyRef.current = k;
+    loadPersisted(k);
+    callbacks?.onScoreboardUpdate?.(buildScoreboard());
+  }, [callbacks, loadPersisted]); // buildScoreboard está definido más abajo; JS hoisting de funciones
+
+  // callbacks externos
   const { onScoreboardUpdate, onYellow, onSendNotice, onUserExpelled } = callbacks || {};
 
   // ── Helpers identidad
@@ -42,7 +77,7 @@ export const useCardSystem = (clientRef, callbacks = {}) => {
       const key = getUserKey(u);
       if (!key) return;
 
-      if (u?.userId) {
+      if (u?.userId != null) {
         userIdToKeyRef.current.set(u.userId, key);
         keyToLastUserIdRef.current.set(key, u.userId);
       }
@@ -56,37 +91,34 @@ export const useCardSystem = (clientRef, callbacks = {}) => {
 
   // ── Selectores para overlay/scoreboard
 
-  
- // Mapa userId -> count (solo >0)
-const getYellowByUserId = useCallback(() => {
-  const out = new Map();
-  const client = clientRef.current;
-  if (!client) return out;
+  // Mapa userId -> count (solo >0), sincrónico usando Meeting SDK
+  const getYellowByUserId = useCallback(() => {
+    const out = new Map();
+    const client = clientRef.current;
+    if (!client) return out;
 
-  
-  const list =
-    client.getAllUser?.() ||
-    client.getAttendeeslist?.() ||
-    [];
+    const list =
+      client.getAllUser?.() ||
+      client.getAttendeeslist?.() ||
+      [];
 
-  for (const p of list) {
-    touchUserMapping(p);
-    const key = userIdToKeyRef.current.get(p.userId) || getUserKey(p);
-    const cnt = yellowByKeyRef.current.get(key) || 0;
-    if (cnt > 0) out.set(p.userId, cnt);
-  }
-  return out;
-}, [clientRef, getUserKey, touchUserMapping]);
+    for (const p of list) {
+      touchUserMapping(p);
+      const key = userIdToKeyRef.current.get(p.userId) || getUserKey(p);
+      const cnt = yellowByKeyRef.current.get(key) || 0;
+      if (cnt > 0) out.set(p.userId, cnt);
+    }
+    return out;
+  }, [clientRef, getUserKey, touchUserMapping]);
 
-// Para compat con overlay: devuelve array de userIds con amarilla
-const getYellowedUserIds = useCallback(() => {
-  const map = getYellowByUserId();
-  return Array.from(map.keys());
-}, [getYellowByUserId]);
-
+  // Para compat con overlay: devuelve array de userIds con amarilla
+  const getYellowedUserIds = useCallback(() => {
+    const map = getYellowByUserId();
+    return Array.from(map.keys());
+  }, [getYellowByUserId]);
 
   // Conteo directo por userId (útil en el overlay)
-  const yellowCountForUserId = useCallback(async (userId) => {
+  const yellowCountForUserId = useCallback((userId) => {
     const key = userIdToKeyRef.current.get(userId);
     if (!key) return 0;
     return yellowByKeyRef.current.get(key) || 0;
@@ -152,6 +184,7 @@ const getYellowedUserIds = useCallback(() => {
       if (!key) return;
 
       redByKeyRef.current.add(key);
+      savePersisted();
       await onSendNotice?.("red", user);
 
       const uid = keyToLastUserIdRef.current.get(key) || user?.userId;
@@ -170,6 +203,7 @@ const getYellowedUserIds = useCallback(() => {
       onScoreboardUpdate,
       buildScoreboard,
       clientRef,
+      savePersisted,
     ]
   );
 
@@ -193,6 +227,7 @@ const getYellowedUserIds = useCallback(() => {
       const prev = yellowByKeyRef.current.get(key) || 0;
       const next = prev + 1;
       yellowByKeyRef.current.set(key, next);
+      savePersisted();
 
       console.log(`🟨 addYellow → ${getNiceName(user)} (${next})`);
 
@@ -213,6 +248,7 @@ const getYellowedUserIds = useCallback(() => {
       onScoreboardUpdate,
       buildScoreboard,
       escalateToRed,
+      savePersisted,
     ]
   );
 
@@ -315,9 +351,11 @@ const getYellowedUserIds = useCallback(() => {
     yellowByKeyRef.current.clear();
     redByKeyRef.current.clear();
     lastYellowAtRef.current.clear();
+    savePersisted();
     onScoreboardUpdate?.(buildScoreboard());
-  }, [onScoreboardUpdate, buildScoreboard]);
+  }, [onScoreboardUpdate, buildScoreboard, savePersisted]);
 
+  // API pública del hook
   return {
     // acciones
     addYellow,
@@ -337,7 +375,11 @@ const getYellowedUserIds = useCallback(() => {
     getYellowedUserIds,       // Array<userId>
     yellowCountForUserId,     // (userId) -> count
 
-    // utilidades/estado por si necesitás
+    // persistencia
+    enablePersistence,
+    clearPersisted,
+
+    // utilidades/estado
     isRed,
     yellowByKey: yellowByKeyRef.current,
     redByKey: redByKeyRef.current,

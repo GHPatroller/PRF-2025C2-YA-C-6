@@ -1,3 +1,4 @@
+// src/components/features/meeting/YellowCardOverlayLayer.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
@@ -22,9 +23,8 @@ export function YellowCardOverlayLayer({ zoomRootRef, clientRef, cardSystem }) {
   const [tiles, setTiles] = useState([]); // [{x,y,w,h,size,count}]
 
   const [idToName, setIdToName] = useState(new Map());
-  const [nameToId, setNameToId] = useState(new Map());
 
-  // Mount del host del overlay
+  // ===== Mount del host del overlay =====
   useEffect(() => {
     const root = zoomRootRef?.current;
     if (!root) return;
@@ -45,7 +45,7 @@ export function YellowCardOverlayLayer({ zoomRootRef, clientRef, cardSystem }) {
     };
   }, [zoomRootRef]);
 
-  // Helpers DOM
+  // ===== Helpers DOM =====
   const climbToTile = (node, maxHops = 8) => {
     let cur = node;
     for (let i = 0; i < maxHops && cur; i++) {
@@ -61,145 +61,95 @@ export function YellowCardOverlayLayer({ zoomRootRef, clientRef, cardSystem }) {
     return null;
   };
 
-  const findLabelNodeForName = (root, displayName) => {
+  // Dado un nombre, encuentra el TILE que:
+  //   a) Contiene un <video>/<canvas> (o su contenedor visual)
+  //   b) Su texto visible incluye el displayName
+  const findTileRectForName = (root, displayName) => {
     const name = String(displayName || "").trim().toLowerCase();
     if (!name) return null;
-    const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT, {
-      acceptNode: (el) => {
-        const tag = el.tagName;
-        if (!tag || tag === "CANVAS" || tag === "VIDEO") return NodeFilter.FILTER_SKIP;
-        const text = el.textContent;
-        if (!text || text.length > 200) return NodeFilter.FILTER_SKIP;
-        return text.trim().toLowerCase().includes(name)
-          ? NodeFilter.FILTER_ACCEPT
-          : NodeFilter.FILTER_SKIP;
-      },
-    });
-    let node = walker.nextNode();
-    while (node) {
-      const st = getComputedStyle(node);
-      if (st.visibility !== "hidden" && st.display !== "none") return node;
-      node = walker.nextNode();
+
+    const visuals = Array.from(root.querySelectorAll("video,canvas"));
+    for (const v of visuals) {
+      const climbed = climbToTile(v, 10);
+      if (!climbed) continue;
+      const { node, rect } = climbed;
+
+      const visibleText = (node.textContent || "").trim().toLowerCase();
+      if (!visibleText) continue;
+      if (!visibleText.includes(name)) continue;
+
+      // Encontramos un tile cuyo subtree incluye el nombre
+      return rect;
     }
     return null;
   };
 
-  // Roster (para mapear id<->nombre como fallback)
-const refreshParticipants = useMemo(
-  () =>
+  // ===== Roster -> id -> nombre =====
+  const refreshParticipants = useMemo(() =>
     throttle(() => {
       const c = clientRef?.current;
       if (!c) return;
       try {
-        // ✅ Meeting SDK: usar getAllUser() / getAttendeeslist()
-        const list =
-          c.getAllUser?.() ||
-          c.getAttendeeslist?.() ||
-          [];
-
+        const list = c.getAllUser?.() || c.getAttendeeslist?.() || [];
         const i2n = new Map();
-        const n2i = new Map();
         list.forEach((u) => {
-          const uid = u?.userId ?? u?.userID ?? u?.id;
+          const uid  = u?.userId ?? u?.userID ?? u?.id;
           const name = u?.displayName ?? u?.userName ?? u?.name ?? "";
-          if (uid != null) {
-            i2n.set(String(uid), name);
-            if (name) n2i.set(String(name), String(uid));
-          }
+          if (uid != null) i2n.set(String(uid), name);
         });
         setIdToName(i2n);
-        setNameToId(n2i);
       } catch {}
-    }, 250),
-  [clientRef]
-);
+    }, 250)
+  , [clientRef]);
 
+  // ===== Construcción de tiles: 1 rect por CADA usuario con amarillas =====
+  const refreshTiles = useMemo(() =>
+    throttle(async () => {
+      const root = zoomRootRef?.current;
+      const host = hostRef.current;
+      if (!root || !host) return;
 
-  // Recalcular los tiles con amarillas (usa cardSystem.getYellowByUserId)
-  const refreshTiles = useMemo(
-    () =>
-      throttle(async () => {
-        const root = zoomRootRef?.current;
-        const host = hostRef.current;
-        if (!root || !host || !cardSystem?.getYellowByUserId) {
-          setTiles([]);
-          return;
-        }
+      let idsMap = new Map(); // Map<userId, count>
+      try {
+        const m = cardSystem?.getYellowByUserId?.();
+        idsMap = m instanceof Promise ? await m : (m || new Map());
+      } catch { idsMap = new Map(); }
 
-        // Map<userId, count>
-        const yMap = await cardSystem.getYellowByUserId();
-        const ids = Array.from(yMap.keys()).map(String);
-        if (!ids.length) {
-          setTiles([]);
-          return;
-        }
+      if (!(idsMap instanceof Map) || idsMap.size === 0) {
+        setTiles([]);
+        return;
+      }
 
-        const visualNodes = Array.from(root.querySelectorAll("canvas,video"));
-        const matches = [];
+      const matches = [];
+      for (const [id, count] of idsMap.entries()) {
+        const name = idToName.get(String(id)) || String(id);
+        const rect = findTileRectForName(root, name);
+        if (!rect) continue;
 
-        const matchOne = (userId, count) => {
-          // 1) Por atributos
-          const attrSel = [
-            `[data-userid="${userId}"]`,
-            `li[data-userid="${userId}"]`,
-          ];
-          let tileNode = null;
-          for (const sel of attrSel) {
-            const el = root.querySelector(sel);
-            if (el) { tileNode = el; break; }
-          }
+        const { left: x, top: y, width: w, height: h } = rect;
+        const size  = Math.max(24, Math.min(w, h) * 0.25);
+        const badge = Math.max(1, Math.min(99, Number(count) || 1));
+        matches.push({ x, y, w, h, size, count: badge });
+      }
 
-          // 2) Por nombre visible (fallback)
-          if (!tileNode) {
-            const displayName = idToName.get(String(userId));
-            if (displayName) {
-              const label = findLabelNodeForName(root, displayName);
-              if (label) {
-                const climbed = climbToTile(label, 12);
-                if (climbed) tileNode = climbed.node;
-              }
-            }
-          }
+      setTiles(matches);
+    }, 200)
+  , [zoomRootRef, cardSystem, idToName]);
 
-          if (!tileNode) return;
-
-          const climbed = climbToTile(tileNode, 12);
-          if (!climbed) return;
-          const { rect } = climbed;
-
-          const w = rect.width, h = rect.height;
-          const x = rect.left;
-          const y = rect.top;
-          const size = Math.max(24, Math.min(w, h) * 0.25);
-
-          matches.push({
-            x, y, w, h,
-            size,
-            count: Number.isFinite(count) ? count : 1,
-          });
-        };
-
-        ids.forEach((uid) => matchOne(uid, yMap.get(uid)));
-
-        setTiles(matches);
-      }, 180),
-    [zoomRootRef, cardSystem, idToName]
-  );
-
-  // Subscriptions
+  // ===== Suscripciones / observers =====
   useEffect(() => {
     const c = clientRef?.current;
     const root = zoomRootRef?.current;
     if (!c || !root) return;
 
     const handlers = [
-      ["user-added", refreshParticipants],
-      ["user-removed", refreshParticipants],
-      ["user-updated", () => { refreshParticipants(); refreshTiles(); }],
-      ["active-speaker", refreshTiles],
+      ["user-added",        refreshParticipants],
+      ["user-removed",      refreshParticipants],
+      ["user-updated",      () => { refreshParticipants(); refreshTiles(); }],
+      ["active-speaker",    refreshTiles],
       ["video-active-change", refreshTiles],
-      ["room-change", () => { refreshParticipants(); refreshTiles(); }],
-      ["meeting-status", () => { refreshParticipants(); refreshTiles(); }],
+      ["room-change",       () => { refreshParticipants(); refreshTiles(); }],
+      ["meeting-status",    () => { refreshParticipants(); refreshTiles(); }],
     ];
     handlers.forEach(([ev, fn]) => { try { c.on?.(ev, fn); } catch {} });
 
@@ -227,50 +177,41 @@ const refreshParticipants = useMemo(
 
   if (!mounted || !hostRef.current) return null;
 
-  // Render overlay
-  const body = (
+  // ===== Render =====
+  return createPortal(
     <div style={{ position: USE_FIXED_OVERLAY ? "fixed" : "absolute", inset: 0, pointerEvents: "none" }}>
       {tiles.map(({ x, y, w, h, size, count }, i) => {
-        const badge = Math.max(1, Math.min(99, Number(count) || 1));
-        const label = badge > 9 ? "9+" : String(badge);
+        const label = count > 9 ? "9+" : String(count);
         return (
           <div key={i} style={{
             position: "absolute",
-            left: Math.round(x),
-            top: Math.round(y),
-            width: Math.round(w),
-            height: Math.round(h)
+            left: Math.round(x), top: Math.round(y),
+            width: Math.round(w), height: Math.round(h)
           }}>
             <div
               style={{
                 position: "absolute",
                 right: Math.max(4, Math.floor(size * 0.2)),
-                top: Math.max(4, Math.floor(size * 0.2)),
-                width: size,
-                height: size,
+                top:   Math.max(4, Math.floor(size * 0.2)),
+                width: size, height: size,
                 borderRadius: Math.floor(size / 6),
                 background: "rgba(255, 204, 0, 0.95)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontWeight: 900,
-                fontSize: Math.max(12, Math.floor(size * 0.55)),
-                lineHeight: 1,
-                color: "#111",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontWeight: 900, fontSize: Math.max(12, Math.floor(size * 0.55)),
+                lineHeight: 1, color: "#111",
                 textShadow: "0 1px 0 rgba(255,255,255,.35)",
                 boxShadow: "0 2px 10px rgba(0,0,0,.35)",
               }}
-              title={`Tarjetas amarillas: ${badge}`}
+              title={`Tarjetas amarillas: ${count}`}
             >
               {label}
             </div>
           </div>
         );
       })}
-    </div>
+    </div>,
+    hostRef.current
   );
-
-  return createPortal(body, hostRef.current);
 }
 
 export default YellowCardOverlayLayer;
