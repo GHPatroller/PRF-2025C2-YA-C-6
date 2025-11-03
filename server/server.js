@@ -4,6 +4,15 @@ import cors from "cors";
 import axios from "axios";
 
 const app = express();
+// 🔐 Aislamiento requerido por Zoom Meeting SDK (SharedArrayBuffer)
+app.use((req, res, next) => {
+  res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
+  res.setHeader("Cross-Origin-Embedder-Policy", "require-corp");
+  // útil cuando servís assets/estáticos: permite que otros orígenes los embeban
+  res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+  next();
+});
+
 app.use(cors());
 app.use(express.json());
 

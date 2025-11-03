@@ -13,12 +13,14 @@ export const useZoomClient = (zoomRef) => {
 
     client.init({
       debug: true,
-      zoomAppRoot: zoomRef.current,
-      language: "es-ES",
-      customize: {
-        video: {
-          isResizable: true,                    // ← CLAVE
-          viewSizes: { default: { width: 800, height: 450 } },
+  zoomAppRoot: zoomRef.current,
+  language: 'es-ES',
+  customize: {
+    video: {
+      isResizable: true,
+      viewSizes: { default: { width: 1000, height: 600 } },
+      viewMode: 'gallery', //  fuerza vista de galería
+      multipleVideoFeeds: true, //  permite mostrar varios mosaicos
         },
         meetingInfo: [], // ok
       },
