@@ -131,7 +131,7 @@ export default function ZoomMeeting() {
         style={{
           position: "relative",
           width: 800,
-          height: 450,
+          height: "80vh", 
           margin: "20px auto 0",
           background: "#000",
         }}
