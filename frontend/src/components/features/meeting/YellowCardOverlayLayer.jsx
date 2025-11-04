@@ -1,4 +1,3 @@
-// src/components/features/meeting/YellowCardOverlayLayer.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
@@ -21,7 +20,6 @@ export function YellowCardOverlayLayer({ zoomRootRef, clientRef, cardSystem }) {
   const hostRef = useRef(null);
   const [mounted, setMounted] = useState(false);
   const [tiles, setTiles] = useState([]); // [{x,y,w,h,size,count}]
-
   const [idToName, setIdToName] = useState(new Map());
 
   // ===== Mount del host del overlay =====
@@ -46,14 +44,24 @@ export function YellowCardOverlayLayer({ zoomRootRef, clientRef, cardSystem }) {
   }, [zoomRootRef]);
 
   // ===== Helpers DOM =====
-  const climbToTile = (node, maxHops = 8) => {
+  const getVisibleRect = (el) => {
+    if (!el?.getBoundingClientRect) return null;
+    const st = getComputedStyle(el);
+    if (st.display === "none" || st.visibility === "hidden" || Number(st.opacity) === 0) return null;
+    const r = el.getBoundingClientRect();
+    if (r.width <= 0 || r.height <= 0) return null;
+    return r;
+  };
+
+  // Sube desde un nodo visual hasta un contenedor "tile" razonable
+  const climbToTile = (node, maxHops = 12) => {
     let cur = node;
     for (let i = 0; i < maxHops && cur; i++) {
       const rect = cur.getBoundingClientRect?.();
       if (!rect) break;
       const area = rect.width * rect.height;
       const st = getComputedStyle(cur);
-      if (st.display !== "none" && st.visibility !== "hidden" && area > 10000) {
+      if (st.display !== "none" && st.visibility !== "hidden" && area > 6000) {
         return { node: cur, rect };
       }
       cur = cur.parentElement;
@@ -61,80 +69,137 @@ export function YellowCardOverlayLayer({ zoomRootRef, clientRef, cardSystem }) {
     return null;
   };
 
-  // Dado un nombre, encuentra el TILE que:
-  //   a) Contiene un <video>/<canvas> (o su contenedor visual)
-  //   b) Su texto visible incluye el displayName
+  // Localiza el TILE por el nombre visible; fallback controlado si no hay label
   const findTileRectForName = (root, displayName) => {
     const name = String(displayName || "").trim().toLowerCase();
     if (!name) return null;
 
-    const visuals = Array.from(root.querySelectorAll("video,canvas"));
-    for (const v of visuals) {
-      const climbed = climbToTile(v, 10);
-      if (!climbed) continue;
-      const { node, rect } = climbed;
+    const candidates = [];
 
-      const visibleText = (node.textContent || "").trim().toLowerCase();
-      if (!visibleText) continue;
-      if (!visibleText.includes(name)) continue;
+    // 1) Buscar el "label" del nombre (nodo pequeño y visible) y subir al tile
+    const guessLabelSelectors = [
+      '[class*="name"]',
+      '[class*="label"]',
+      '[data-name]',
+      '[aria-label]',
+      "span",
+      "div",
+    ];
+    const labelNodes = Array.from(root.querySelectorAll(guessLabelSelectors.join(",")))
+      .filter((n) => {
+        const txt = ((n.getAttribute?.("aria-label") || n.textContent || "") + "").toLowerCase();
+        if (!txt.includes(name)) return false;
+        const r = getVisibleRect(n);
+        // tamaño razonable para un label (evita wrappers gigantes)
+        return r && (r.width * r.height) >= 120 && (r.width * r.height) <= 40000;
+      });
 
-      // Encontramos un tile cuyo subtree incluye el nombre
-      return rect;
+    for (const n of labelNodes) {
+      const climbed = climbToTile(n, 12);
+      if (climbed) candidates.push(climbed);
     }
-    return null;
+
+    // 2) Fallback: partir de <video>/<canvas> pero exigir label visible dentro del tile
+    if (!candidates.length) {
+      const visuals = Array.from(root.querySelectorAll("video,canvas"));
+      for (const v of visuals) {
+        const climbed = climbToTile(v, 12);
+        if (!climbed) continue;
+        const { node, rect } = climbed;
+
+        const innerLabel = Array.from(node.querySelectorAll("*")).some((el) => {
+          const txt = ((el.getAttribute?.("aria-label") || el.textContent || "") + "").toLowerCase();
+          if (!txt.includes(name)) return false;
+          const rr = getVisibleRect(el);
+          return rr && (rr.width * rr.height) >= 120 && (rr.width * rr.height) <= 40000;
+        });
+
+        if (innerLabel) candidates.push({ node, rect });
+      }
+    }
+
+    // 3) Último intento: items de lista MUI/Zoom (con filtro de tamaño)
+    if (!candidates.length) {
+      const listItems = Array.from(
+        root.querySelectorAll('li[class*="MuiListItem-root"],div[class*="MuiListItem-root"]')
+      );
+      for (const li of listItems) {
+        const txt = (li.textContent || "").toLowerCase();
+        if (!txt.includes(name)) continue;
+        const rect = getVisibleRect(li);
+        if (rect && (rect.width * rect.height) > 6000) candidates.push({ node: li, rect });
+      }
+    }
+
+    if (!candidates.length) return null;
+
+    // Elegimos un tamaño razonable (evita wrappers gigantes)
+    candidates.sort((a, b) => (a.rect.width * a.rect.height) - (b.rect.width * b.rect.height));
+    const pick =
+      candidates.find(
+        (c) => (c.rect.width * c.rect.height) < (window.innerWidth * window.innerHeight) * 0.6
+      ) || candidates[0];
+
+    return pick.rect;
   };
 
   // ===== Roster -> id -> nombre =====
-  const refreshParticipants = useMemo(() =>
-    throttle(() => {
-      const c = clientRef?.current;
-      if (!c) return;
-      try {
-        const list = c.getAllUser?.() || c.getAttendeeslist?.() || [];
-        const i2n = new Map();
-        list.forEach((u) => {
-          const uid  = u?.userId ?? u?.userID ?? u?.id;
-          const name = u?.displayName ?? u?.userName ?? u?.name ?? "";
-          if (uid != null) i2n.set(String(uid), name);
-        });
-        setIdToName(i2n);
-      } catch {}
-    }, 250)
-  , [clientRef]);
+  const refreshParticipants = useMemo(
+    () =>
+      throttle(() => {
+        const c = clientRef?.current;
+        if (!c) return;
+        try {
+          const list = c.getAllUser?.() || c.getAttendeeslist?.() || [];
+          const i2n = new Map();
+          list.forEach((u) => {
+            const uid = u?.userId ?? u?.userID ?? u?.id;
+            const name = u?.displayName ?? u?.userName ?? u?.name ?? "";
+            if (uid != null) i2n.set(String(uid), name);
+          });
+          setIdToName(i2n);
+        } catch {}
+      }, 250),
+    [clientRef]
+  );
 
   // ===== Construcción de tiles: 1 rect por CADA usuario con amarillas =====
-  const refreshTiles = useMemo(() =>
-    throttle(async () => {
-      const root = zoomRootRef?.current;
-      const host = hostRef.current;
-      if (!root || !host) return;
+  const refreshTiles = useMemo(
+    () =>
+      throttle(async () => {
+        const root = zoomRootRef?.current;
+        const host = hostRef.current;
+        if (!root || !host) return;
 
-      let idsMap = new Map(); // Map<userId, count>
-      try {
-        const m = cardSystem?.getYellowByUserId?.();
-        idsMap = m instanceof Promise ? await m : (m || new Map());
-      } catch { idsMap = new Map(); }
+        let idsMap = new Map(); // Map<userId, count>
+        try {
+          const m = cardSystem?.getYellowByUserId?.();
+          idsMap = m instanceof Promise ? await m : (m || new Map());
+        } catch {
+          idsMap = new Map();
+        }
 
-      if (!(idsMap instanceof Map) || idsMap.size === 0) {
-        setTiles([]);
-        return;
-      }
+        if (!(idsMap instanceof Map) || idsMap.size === 0) {
+          setTiles([]);
+          return;
+        }
 
-      const matches = [];
-      for (const [id, count] of idsMap.entries()) {
-        const name = idToName.get(String(id)) || String(id);
-        const rect = findTileRectForName(root, name);
-        if (!rect) continue;
+        const matches = [];
+        for (const [id, count] of idsMap.entries()) {
+          const name = idToName.get(String(id)) || String(id);
+          const rect = findTileRectForName(root, name);
+          if (!rect) continue;
 
-        const { left: x, top: y, width: w, height: h } = rect;
-        const size  = Math.max(24, Math.min(w, h) * 0.25);
-        const badge = Math.max(1, Math.min(99, Number(count) || 1));
-        matches.push({ x, y, w, h, size, count: badge });
-      }
+          const { left: x, top: y, width: w, height: h } = rect;
+          const size = Math.max(24, Math.min(w, h) * 0.25);
+          const badge = Math.max(1, Math.min(99, Number(count) || 1));
+          matches.push({ x, y, w, h, size, count: badge });
+        }
 
-      setTiles(matches);
-    }, 200)
-  , [zoomRootRef, cardSystem, idToName]);
+        setTiles(matches);
+      }, 200),
+    [zoomRootRef, cardSystem, idToName]
+  );
 
   // ===== Suscripciones / observers =====
   useEffect(() => {
@@ -143,13 +208,13 @@ export function YellowCardOverlayLayer({ zoomRootRef, clientRef, cardSystem }) {
     if (!c || !root) return;
 
     const handlers = [
-      ["user-added",        refreshParticipants],
-      ["user-removed",      refreshParticipants],
-      ["user-updated",      () => { refreshParticipants(); refreshTiles(); }],
-      ["active-speaker",    refreshTiles],
+      ["user-added", refreshParticipants],
+      ["user-removed", refreshParticipants],
+      ["user-updated", () => { refreshParticipants(); refreshTiles(); }],
+      ["active-speaker", refreshTiles],
       ["video-active-change", refreshTiles],
-      ["room-change",       () => { refreshParticipants(); refreshTiles(); }],
-      ["meeting-status",    () => { refreshParticipants(); refreshTiles(); }],
+      ["room-change", () => { refreshParticipants(); refreshTiles(); }],
+      ["meeting-status", () => { refreshParticipants(); refreshTiles(); }],
     ];
     handlers.forEach(([ev, fn]) => { try { c.on?.(ev, fn); } catch {} });
 

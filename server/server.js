@@ -4,11 +4,11 @@ import cors from "cors";
 import axios from "axios";
 
 const app = express();
-// 🔐 Aislamiento requerido por Zoom Meeting SDK (SharedArrayBuffer)
+// Aislamiento requerido por Zoom Meeting SDK (SharedArrayBuffer)
 app.use((req, res, next) => {
   res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
   res.setHeader("Cross-Origin-Embedder-Policy", "require-corp");
-  // útil cuando servís assets/estáticos: permite que otros orígenes los embeban
+  // util cuando servís assets/estáticos: permite que otros orígenes los embeban
   res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
   next();
 });
@@ -93,7 +93,7 @@ app.post("/create-meeting", async (req, res) => {
       join_url: z.join_url,
       start_url: z.start_url,
       password: z.password || "",
-      meetingNumber: String(z.id),    // por si tu UI lo espera como string
+      meetingNumber: String(z.id),   
     });
   } catch (err) {
     console.error("❌ Error creando reunión:", err.response?.data || err.message);

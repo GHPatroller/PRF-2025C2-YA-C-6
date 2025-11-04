@@ -1,4 +1,3 @@
-// src/ZoomMeeting.jsx
 import React, { useRef, useState, useEffect } from "react";
 import { useZoomClient } from "./hooks/useZoomClient";
 import { useUserManagement } from "./hooks/useUserManagement";
@@ -18,7 +17,7 @@ export default function ZoomMeeting() {
     admitOnHold,
     sendToOnHold,
     scoreboard,
-    cardSystem,             // 👈 lo necesitamos
+    cardSystem,             
   } = useUserManagement(clientRef, {
     pauseCameraRule: isRecreo,
     pauseMicRule: isMicPaused,
@@ -57,7 +56,7 @@ export default function ZoomMeeting() {
         }}
       >
         <div ref={zoomRef} style={{ position: "absolute", inset: 0 }} />
-        {/* 👇 PASAR cardSystem (overlay nuevo) */}
+        {/* PcardSystem overlay nuevo */}
         <YellowCardOverlayLayer
           zoomRootRef={zoomRef}
           clientRef={clientRef}
