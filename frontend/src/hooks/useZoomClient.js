@@ -40,7 +40,6 @@ export const useZoomClient = (zoomRef) => {
             layout: "grid",
             maxTiles: 9,         // deja espacio para varios
           });
-          console.log("🔳 Forcé layout: gallery/grid");
         } catch (e) {
           console.warn("No pude aplicar layout de galería:", e);
         }

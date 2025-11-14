@@ -108,7 +108,7 @@ export const useVideoControls = (clientRef, getRoster, callbacks) => {
           },
           STABILIZE_MS
         );
-        console.log(`⏳ Esperando estado cámara de ${user.displayName || id} (${STABILIZE_MS}ms)`);
+       // console.log(`⏳ Esperando estado cámara de ${user.displayName || id} (${STABILIZE_MS}ms)`);
       }
       return;
     }
@@ -132,7 +132,7 @@ export const useVideoControls = (clientRef, getRoster, callbacks) => {
         },
         GRACE_MS
       );
-      console.log(`⏳ Grace ${GRACE_MS / 1000}s para ${user.displayName || id} (cámara OFF)`);
+      //console.log(`⏳ Grace ${GRACE_MS / 1000}s para ${user.displayName || id} (cámara OFF)`);
     }
   }, [getRoster, onClearTimers, callbacks, isActiveParticipant, clearAllTimers, onUserAlert]);
 
@@ -173,7 +173,7 @@ export const useVideoControls = (clientRef, getRoster, callbacks) => {
         },
         GRACE_MS
       );
-      console.log(`⏳ Grace ${GRACE_MS / 1000}s para ${user.displayName || id} (micrófono OFF)`);
+      //console.log(`⏳ Grace ${GRACE_MS / 1000}s para ${user.displayName || id} (micrófono OFF)`);
     }
   }, [getRoster, onClearTimers, callbacks, isActiveParticipant, clearAllTimers, onUserAlert]);
 

@@ -22,7 +22,7 @@ export const useMeetingActions = (clientRef, callbacks) => {
         userName: 'Host PoC',
       });
 
-      console.log('✅ Host unido');
+      //console.log('✅ Host unido');
       onMeetingCreated?.({ meetingNumber, password });
     } catch (err) {
       console.error('❌ Error create/join:', err);
