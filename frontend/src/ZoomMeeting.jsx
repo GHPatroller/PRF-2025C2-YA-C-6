@@ -1,15 +1,19 @@
 import React, { useRef, useState, useEffect } from "react";
 import { useZoomClient } from "./hooks/useZoomClient";
 import { useUserManagement } from "./hooks/useUserManagement";
+import { useHideCameraButton } from "./hooks/useHideCameraButton"; // 👈 nuevo
 import { MeetingControls } from "./components/features/meeting/MeetingControls";
 import { YellowCardOverlayLayer } from "./components/features/meeting/YellowCardOverlayLayer";
 
-export default function ZoomMeeting() {
+export default function ZoomMeeting({ role = 0 }) {
   const zoomRef = useRef(null);
   const clientRef = useZoomClient(zoomRef);
 
   const [isRecreo, setIsRecreo] = useState(false);
   const [isMicPaused, setIsMicPaused] = useState(false);
+
+  // 👇 si role === 0 (alumno) ocultamos el botón de cámara
+  useHideCameraButton(true);
 
   const {
     waitingUsers,
@@ -17,14 +21,13 @@ export default function ZoomMeeting() {
     admitOnHold,
     sendToOnHold,
     scoreboard,
-    cardSystem,             
+    cardSystem,
   } = useUserManagement(clientRef, {
     pauseCameraRule: isRecreo,
     pauseMicRule: isMicPaused,
   });
 
   useEffect(() => {
-    // helpers para debug rápido en consola
     window.__CARD = cardSystem || null;
     window.__ROSTER = () =>
       clientRef.current?.getParticipantsList?.() ||
@@ -56,7 +59,7 @@ export default function ZoomMeeting() {
         }}
       >
         <div ref={zoomRef} style={{ position: "absolute", inset: 0 }} />
-        {/* PcardSystem overlay nuevo */}
+
         <YellowCardOverlayLayer
           zoomRootRef={zoomRef}
           clientRef={clientRef}
