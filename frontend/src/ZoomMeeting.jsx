@@ -1,7 +1,7 @@
 import React, { useRef, useState, useEffect } from "react";
 import { useZoomClient } from "./hooks/useZoomClient";
 import { useUserManagement } from "./hooks/useUserManagement";
-import { useHideCameraButton } from "./hooks/useHideCameraButton"; // 👈 nuevo
+import { useHideCameraButton } from "./hooks/useHideCameraButton";
 import { MeetingControls } from "./components/features/meeting/MeetingControls";
 import { YellowCardOverlayLayer } from "./components/features/meeting/YellowCardOverlayLayer";
 
@@ -12,8 +12,8 @@ export default function ZoomMeeting({ role = 0 }) {
   const [isRecreo, setIsRecreo] = useState(false);
   const [isMicPaused, setIsMicPaused] = useState(false);
 
-  // 👇 si role === 0 (alumno) ocultamos el botón de cámara
-  useHideCameraButton(true);
+  // 👉 Ocultar el botón de cámara para todos (host + alumnos)
+  useHideCameraButton();
 
   const {
     waitingUsers,
@@ -45,8 +45,8 @@ export default function ZoomMeeting({ role = 0 }) {
         waitingUsersCount={waitingUsers?.length || 0}
         isRecreo={isRecreo}
         isMicPaused={isMicPaused}
-        onToggleRecreo={() => setIsRecreo(v => !v)}
-        onToggleMicPaused={() => setIsMicPaused(v => !v)}
+        onToggleRecreo={() => setIsRecreo((v) => !v)}
+        onToggleMicPaused={() => setIsMicPaused((v) => !v)}
       />
 
       <div

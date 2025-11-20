@@ -3,26 +3,18 @@ import { useEffect } from "react";
 export function useHideCameraButton() {
   useEffect(() => {
     const hideCameraButton = () => {
-      const footer =
-        document.querySelector('.zm-meeting-footer') ||
-        document.querySelector('[class*="footer__"]');
+      // Buscamos botones con la clase que viste en DevTools
+      const buttons = document.querySelectorAll("button.css-1lnylgv");
 
-      if (!footer) return;
+      console.log("[ZFEv1] hideCameraButton -> css-1lnylgv encontrados:", buttons.length);
 
-      // Botones de la toolbar de Zoom (Material UI)
-      const buttons = footer.querySelectorAll(
-        'button.zoom-MuiButtonBase-root, button[class*="MuiButtonBase-root"]'
-      );
-
-      // Por convención: [0] audio, [1] video
-      if (buttons.length >= 2) {
-        const videoBtn = buttons[1];
-        videoBtn.style.display = "none";
-      }
+      buttons.forEach((btn) => {
+        btn.style.display = "none";
+      });
     };
 
     hideCameraButton();
-    const id = setInterval(hideCameraButton, 1500); // por si Zoom re-dibuja la barra
+    const id = setInterval(hideCameraButton, 1500); // por si Zoom re-renderiza el footer
     return () => clearInterval(id);
   }, []);
 }
