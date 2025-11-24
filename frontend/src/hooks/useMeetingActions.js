@@ -51,6 +51,7 @@ export const useMeetingActions = (clientRef, callbacks) => {
         meetingNumber: String(meetingData.meetingNumber),
         password: meetingData.password || '',
         userName: finalUserName,
+        role: meetingData.role,
       });
 
       console.log('✅ Successfully joined meeting');

@@ -25,7 +25,16 @@ if (!$zoom) {
 // Datos de la reunión
 $meetingNumber = $zoom->meeting_id;
 $meetingPassword = $zoom->password;
-$role = 0; // 0 = participante, 1 = host
+
+//Aca me traigo el id del la actividad
+$context = context_module::instance($cm->id);
+
+//Verifico si el usuario tiene rol para agregar una actividad de este tipo en el curso
+//Si tiene es que es profesor , sino es estudiante
+$isTeacher = has_capability('mod/zoom:addinstance', $context) || 
+             has_capability('moodle/course:manageactivities', $context);
+
+$role = $isTeacher ? 1 : 0;
 
 // 🔑 Claves del SDK
 $sdkKey = 'ivAxPv8jS2maS22Cbj6gpA';
