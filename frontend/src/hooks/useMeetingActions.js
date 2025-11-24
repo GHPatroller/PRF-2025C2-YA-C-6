@@ -5,27 +5,57 @@ export const useMeetingActions = (clientRef, callbacks) => {
 
   const createAndJoinMeeting = async () => {
     const client = clientRef?.current;
-    if (!client) return;
+    if (!client) {
+      console.error('❌ Zoom client not initialized');
+      return;
+    }
+
+    const meetingData = zoomAPI.getMeetingData();
+
+    if (!meetingData) {
+      console.error('❌ No meeting data received from Moodle iframe');
+      alert('Error: No se recibieron los datos de la reunión. Por favor, recarga la página.');
+      return;
+    }
+
+    if (!zoomAPI.isReady()) {
+      console.error('❌ Meeting data incomplete:', meetingData);
+      alert('Error: Datos de reunión incompletos. Por favor, recarga la página.');
+      return;
+    }
 
     try {
-      const { meetingNumber, password } = await zoomAPI.createMeeting();
-      const { signature } = await zoomAPI.getSignature(meetingNumber, 1);
-
       try {
+        console.log('🚪 Attempting to leave any existing meeting...');
         await client.leaveMeeting(true);
-      } catch {}
+        console.log('✅ Left previous meeting');
+        await new Promise(resolve => setTimeout(resolve, 500));
+      } catch (leaveError) {
+        console.log('ℹ️ No previous meeting to leave or already left:', leaveError.message);
+      }
 
-      await client.join({
-        signature,
-        meetingNumber: String(meetingNumber),
-        password: password || '',
-        userName: 'Host PoC',
+      console.log('🔗 Joining meeting with data from Moodle:', {
+        meetingNumber: meetingData.meetingNumber,
+        role: meetingData.role,
+        hasSignature: !!meetingData.signature
       });
 
-      //console.log('✅ Host unido');
-      onMeetingCreated?.({ meetingNumber, password });
+      await client.join({
+        signature: meetingData.signature,
+        sdkKey: meetingData.sdkKey,
+        meetingNumber: String(meetingData.meetingNumber),
+        password: meetingData.password || '',
+        userName: 'Usuario Moodle',
+      });
+
+      console.log('✅ Successfully joined meeting');
+      onMeetingCreated?.({
+        meetingNumber: meetingData.meetingNumber,
+        password: meetingData.password
+      });
     } catch (err) {
-      console.error('❌ Error create/join:', err);
+      console.error('❌ Error joining meeting:', err);
+      alert('Error al unirse a la reunión: ' + (err.message || err.reason || 'Error desconocido'));
       throw err;
     }
   };
@@ -51,7 +81,7 @@ export const useMeetingActions = (clientRef, callbacks) => {
 
   const sendToWaitingRoom = async (user) => {
     if (!user?.userId) return;
-    
+
     try {
       await clientRef.current.putOnHold(user.userId, true);
       onUserHeld?.(user);
