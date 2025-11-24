@@ -71,7 +71,15 @@ try {
         password: "<?php echo $meetingPassword; ?>",
         role: <?php echo $role; ?>,
         sdkKey: "<?php echo $sdkKey; ?>",
-        signature: "<?php echo $signature; ?>"
+        signature: "<?php echo $signature; ?>",
+        user: {
+            id: <?php echo $USER->id; ?>,
+            username: "<?php echo $USER->username; ?>",
+            firstname: "<?php echo $USER->firstname; ?>",
+            lastname: "<?php echo $USER->lastname; ?>",
+            fullname: "<?php echo fullname($USER); ?>",
+            email: "<?php echo $USER->email; ?>"
+        }
     };
 
     console.log("📦 Datos de reunión preparados:", meetingData);

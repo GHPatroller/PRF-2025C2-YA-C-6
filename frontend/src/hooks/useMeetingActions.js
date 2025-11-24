@@ -37,15 +37,20 @@ export const useMeetingActions = (clientRef, callbacks) => {
       console.log('🔗 Joining meeting with data from Moodle:', {
         meetingNumber: meetingData.meetingNumber,
         role: meetingData.role,
-        hasSignature: !!meetingData.signature
+        hasSignature: !!meetingData.signature,
+        userName: meetingData.user?.fullname,
+        userObject: meetingData.user
       });
+
+      const finalUserName = meetingData.user?.fullname || meetingData.user?.username || 'Usuario Moodle';
+      console.log('👤 Final userName to use:', finalUserName);
 
       await client.join({
         signature: meetingData.signature,
         sdkKey: meetingData.sdkKey,
         meetingNumber: String(meetingData.meetingNumber),
         password: meetingData.password || '',
-        userName: 'Usuario Moodle',
+        userName: finalUserName,
       });
 
       console.log('✅ Successfully joined meeting');

@@ -29,7 +29,12 @@ export const useIframeMessaging = () => {
                     return;
                 }
 
-                console.log('📨 Received meeting data from Moodle:', payload);
+                console.log('📨 Received meeting data from Moodle:', {
+                    meetingNumber: payload.meetingNumber,
+                    role: payload.role,
+                    hasSignature: !!payload.signature,
+                    user: payload.user
+                });
 
                 zoomAPI.setMeetingData(payload);
                 hasReceivedData.current = true;
