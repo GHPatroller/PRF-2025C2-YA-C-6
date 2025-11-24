@@ -25,7 +25,7 @@ export const useUserManagement = (clientRef, opts = {}) => {
     try {
       // Usar tu sistema de chat privado existente
       await sendPrivateChat(clientRef, user.userId, message);
-     // console.log(` Alerta enviada a ${user.displayName}: ${message}`);
+      // console.log(` Alerta enviada a ${user.displayName}: ${message}`);
     } catch (error) {
       console.warn('Error enviando alerta a usuario:', error);
     }
@@ -45,7 +45,7 @@ export const useUserManagement = (clientRef, opts = {}) => {
   };
 
   const cardSystem = useCardSystem(clientRef, {
-    onSendNotice: async () => {},
+    onSendNotice: async () => { },
     onUserExpelled: (userId) => videoControls?.clearUserState?.(userId),
     onScoreboardUpdate: (rows) => setScoreboard(Array.isArray(rows) ? rows : []),
     // Si tu useCardSystem dispara esto, mandamos DM inmediato
@@ -186,7 +186,7 @@ export const useUserManagement = (clientRef, opts = {}) => {
             const key = cardSystem.nameToKeyRef?.get(displayName) || displayName;
             cardSystem.keyToLastUserIdRef?.set(key, user.userId);
           }
-        } catch {}
+        } catch { }
       }
       cardSystem.updatePresence(getRoster());
     },
@@ -215,7 +215,7 @@ export const useUserManagement = (clientRef, opts = {}) => {
   // -----------------------------
   const meetingActions = useMeetingActions(clientRef, {
     onUserAdmitted: (user) => {
-     // console.log('✅ Admitido desde Waiting Room');
+      // console.log('✅ Admitido desde Waiting Room');
       waitingRoom.removeWaitingUser(user.userId || user.userGUID);
       videoControls?.clearUserState?.(user.userId);
       cardSystem.updatePresence(getRoster());
@@ -342,7 +342,7 @@ export const useUserManagement = (clientRef, opts = {}) => {
   // -----------------------------
   // Meeting actions shortcuts
   // -----------------------------
-  const createAndJoinMeeting = meetingActions.createAndJoinMeeting;
+  const joinMeeting = meetingActions.joinMeeting;
 
   const admitOnHold = async () => {
     if (!waitingRoom.waitingUsers.length) {
@@ -371,7 +371,7 @@ export const useUserManagement = (clientRef, opts = {}) => {
 
   return {
     waitingUsers: waitingRoom.waitingUsers,
-    createAndJoinMeeting,
+    joinMeeting,
     admitOnHold,
     sendToOnHold,
     handleVideoState: videoControls.handleVideoState,

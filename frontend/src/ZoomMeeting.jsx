@@ -17,7 +17,7 @@ export default function ZoomMeeting({ role = 0 }) {
 
   const {
     waitingUsers,
-    createAndJoinMeeting,
+    joinMeeting,
     admitOnHold,
     sendToOnHold,
     scoreboard,
@@ -39,7 +39,7 @@ export default function ZoomMeeting({ role = 0 }) {
   return (
     <div style={{ padding: 16 }}>
       <MeetingControls
-        onCreateJoin={createAndJoinMeeting}
+        onCreateJoin={joinMeeting}
         onSendToWaiting={() => sendToOnHold()}
         onAdmitFromWaiting={() => admitOnHold()}
         waitingUsersCount={waitingUsers?.length || 0}

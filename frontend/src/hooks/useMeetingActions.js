@@ -3,7 +3,7 @@ import { zoomAPI } from "../services/zoomAPI";
 export const useMeetingActions = (clientRef, callbacks) => {
   const { onUserAdmitted, onUserHeld, onMeetingCreated } = callbacks;
 
-  const createAndJoinMeeting = async () => {
+  const joinMeeting = async () => {
     const client = clientRef?.current;
     if (!client) {
       console.error('❌ Zoom client not initialized');
@@ -97,7 +97,7 @@ export const useMeetingActions = (clientRef, callbacks) => {
   };
 
   return {
-    createAndJoinMeeting,
+    joinMeeting,
     admitUser,
     sendToWaitingRoom
   };
