@@ -4,6 +4,7 @@ import { useUserManagement } from "./hooks/useUserManagement";
 import { useHideCameraButton } from "./hooks/useHideCameraButton";
 import { MeetingControls } from "./components/features/meeting/MeetingControls";
 import { YellowCardOverlayLayer } from "./components/features/meeting/YellowCardOverlayLayer";
+import { useToggleZoomControls } from "./hooks/useToogleZoomControls";
 
 export default function ZoomMeeting({ role = 0 }) {
   const zoomRef = useRef(null);
@@ -12,8 +13,16 @@ export default function ZoomMeeting({ role = 0 }) {
   const [isRecreo, setIsRecreo] = useState(false);
   const [isMicPaused, setIsMicPaused] = useState(false);
 
-  // 👉 Ocultar el botón de cámara para todos (host + alumnos)
-  useHideCameraButton();
+  // 🔹 Estado y acción para mostrar/ocultar controles de Zoom
+  const {
+    hidden: areZoomControlsHidden,
+    toggle: onToggleZoomControls,
+  } = useToggleZoomControls();
+
+  // 🔸 Por ahora NO ocultamos la cámara automáticamente,
+  // para no romper la sala de espera ni pelear con el toggle.
+  // Si después querés reactivarlo, acá podríamos pasarle clientRef.
+  // useHideCameraButton(clientRef);
 
   const {
     waitingUsers,
@@ -47,6 +56,9 @@ export default function ZoomMeeting({ role = 0 }) {
         isMicPaused={isMicPaused}
         onToggleRecreo={() => setIsRecreo((v) => !v)}
         onToggleMicPaused={() => setIsMicPaused((v) => !v)}
+        // 🔹 props nuevas para el botón de mostrar/ocultar controles de Zoom
+        areZoomControlsHidden={areZoomControlsHidden}
+        onToggleZoomControls={onToggleZoomControls}
       />
 
       <div

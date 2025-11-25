@@ -9,7 +9,11 @@ export const MeetingControls = ({
   isRecreo = false,
   isMicPaused = false,
   onToggleRecreo = () => { },
-  onToggleMicPaused = () => { }
+  onToggleMicPaused = () => { },
+
+  // 🔹 NUEVOS:
+  areZoomControlsHidden = false,
+  onToggleZoomControls = () => { },
 }) => {
   return (
     <div>
@@ -37,6 +41,23 @@ export const MeetingControls = ({
         </button>
       </div>
 
+      {/* 🔹 BOTÓN PARA MOSTRAR/OCULTAR CONTROLES DE ZOOM */}
+      <div style={{ marginTop: 16 }}>
+        <Button
+          variant="secondary"
+          onClick={onToggleZoomControls}
+          title={
+            areZoomControlsHidden
+              ? 'Mostrar botones de Zoom (cámara, mic, etc.)'
+              : 'Ocultar botones de Zoom (cámara, mic, etc.)'
+          }
+        >
+          {areZoomControlsHidden
+            ? 'Mostrar controles de Zoom'
+            : 'Ocultar controles de Zoom'}
+        </Button>
+      </div>
+
       {/* Botón RECREO */}
       <div style={{ marginTop: 16 }}>
         <Button
@@ -53,7 +74,6 @@ export const MeetingControls = ({
           <strong>Recreo:</strong> la regla de cámara está pausada.
         </div>
       )}
-
 
       {/* Boton MIC */}
       <div style={{ marginTop: 16 }}>
@@ -79,6 +99,5 @@ export const MeetingControls = ({
         </div>
       )}
     </div>
-
   );
 };
