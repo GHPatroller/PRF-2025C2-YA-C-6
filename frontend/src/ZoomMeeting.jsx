@@ -1,10 +1,13 @@
+// frontend/src/ZoomMeeting.jsx
 import React, { useRef, useState, useEffect } from "react";
 import { useZoomClient } from "./hooks/useZoomClient";
 import { useUserManagement } from "./hooks/useUserManagement";
 import { useHideCameraButton } from "./hooks/useHideCameraButton";
 import { MeetingControls } from "./components/features/meeting/MeetingControls";
 import { YellowCardOverlayLayer } from "./components/features/meeting/YellowCardOverlayLayer";
-import { useToggleZoomControls } from "./hooks/useToogleZoomControls";
+import { useToggleZoomControls } from "./hooks/useToggleZoomControls";
+
+const GRACE_MS = 15_000; // 15s para probar
 
 export default function ZoomMeeting({ role = 0 }) {
   const zoomRef = useRef(null);
@@ -13,16 +16,18 @@ export default function ZoomMeeting({ role = 0 }) {
   const [isRecreo, setIsRecreo] = useState(false);
   const [isMicPaused, setIsMicPaused] = useState(false);
 
-  // 🔹 Estado y acción para mostrar/ocultar controles de Zoom
+  console.log("[ZFE] ZoomMeeting render", { role });
+
   const {
     hidden: areZoomControlsHidden,
     toggle: onToggleZoomControls,
   } = useToggleZoomControls();
 
-  // 🔸 Por ahora NO ocultamos la cámara automáticamente,
-  // para no romper la sala de espera ni pelear con el toggle.
-  // Si después querés reactivarlo, acá podríamos pasarle clientRef.
-  // useHideCameraButton(clientRef);
+  // 🔹 Timer: después de GRACE_MS se esconden los botones para todos
+  useHideCameraButton({
+    enabled: true,
+    delayMs: GRACE_MS,
+  });
 
   const {
     waitingUsers,
@@ -56,7 +61,6 @@ export default function ZoomMeeting({ role = 0 }) {
         isMicPaused={isMicPaused}
         onToggleRecreo={() => setIsRecreo((v) => !v)}
         onToggleMicPaused={() => setIsMicPaused((v) => !v)}
-        // 🔹 props nuevas para el botón de mostrar/ocultar controles de Zoom
         areZoomControlsHidden={areZoomControlsHidden}
         onToggleZoomControls={onToggleZoomControls}
       />
