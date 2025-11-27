@@ -1,0 +1,17 @@
+{
+    "name": "usuario/zoomforeducationv1",
+    "autoload": {
+        "psr-4": {
+            "Usuario\\Zoomforeducationv1\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "amendo",
+            "email": "amendo1964@gmail.com"
+        }
+    ],
+    "require": {
+        "firebase/php-jwt": "^6.11"
+    }
+}
