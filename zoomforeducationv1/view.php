@@ -26,11 +26,11 @@ if (!$zoom) {
 $meetingNumber = $zoom->meeting_id;
 $meetingPassword = $zoom->password;
 
-//Aca me traigo el id del la actividad
+// Aca me traigo el id del la actividad
 $context = context_module::instance($cm->id);
 
-//Verifico si el usuario tiene rol para agregar una actividad de este tipo en el curso
-//Si tiene es que es profesor , sino es estudiante
+// Verifico si el usuario tiene rol para agregar una actividad de este tipo en el curso
+// Si tiene es que es profesor , sino es estudiante
 $isTeacher = has_capability('mod/zoom:addinstance', $context) || 
              has_capability('moodle/course:manageactivities', $context);
 
@@ -45,12 +45,12 @@ $iat = time() - 60; // Restar 60s para evitar problemas de sincronización de re
 $exp = $iat + 2 * 60 * 60;
 
 $payload = [
-    'sdkKey' => $sdkKey, // Requerido en versiones nuevas
-    'appKey' => $sdkKey, // Mantener por compatibilidad
-    'mn'     => (string)$meetingNumber,
-    'role'   => (int)$role,
-    'iat'    => $iat,
-    'exp'    => $exp,
+    'sdkKey'   => $sdkKey, // Requerido en versiones nuevas
+    'appKey'   => $sdkKey, // Mantener por compatibilidad
+    'mn'       => (string)$meetingNumber,
+    'role'     => (int)$role,
+    'iat'      => $iat,
+    'exp'      => $exp,
     'tokenExp' => $exp
 ];
 
@@ -64,13 +64,15 @@ try {
 
 ?>
 
-<!-- Contenedor del iframe que carga tu app React -->
 <iframe
     id="zoomAppFrame"
     src="http://localhost:5173"
     width="100%"
     height="85vh"
-    style="border: none; min-height: 600px;"></iframe>
+    style="border: none; min-height: 600px;"
+    allow="camera; microphone; fullscreen; autoplay; clipboard-read; clipboard-write"
+    allowfullscreen>
+</iframe>
 
 <script>
     const iframe = document.getElementById("zoomAppFrame");
