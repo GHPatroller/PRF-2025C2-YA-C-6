@@ -7,7 +7,7 @@ import { MeetingControls } from "./components/features/meeting/MeetingControls";
 import { YellowCardOverlayLayer } from "./components/features/meeting/YellowCardOverlayLayer";
 import { useToggleZoomControls } from "./hooks/useToggleZoomControls";
 
-const GRACE_MS = 15_000; // 15s para probar
+const GRACE_MS = 60_000; // 15s para probar
 
 export default function ZoomMeeting({ role = 0 }) {
   const zoomRef = useRef(null);
