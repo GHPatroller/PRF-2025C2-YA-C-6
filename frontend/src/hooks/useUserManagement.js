@@ -25,7 +25,7 @@ export const useUserManagement = (clientRef, opts = {}) => {
     try {
       // Usar tu sistema de chat privado existente
       await sendPrivateChat(clientRef, user.userId, message);
-     // console.log(` Alerta enviada a ${user.displayName}: ${message}`);
+      // console.log(` Alerta enviada a ${user.displayName}: ${message}`);
     } catch (error) {
       console.warn('Error enviando alerta a usuario:', error);
     }
@@ -45,7 +45,7 @@ export const useUserManagement = (clientRef, opts = {}) => {
   };
 
   const cardSystem = useCardSystem(clientRef, {
-    onSendNotice: async () => {},
+    onSendNotice: async () => { },
     onUserExpelled: (userId) => videoControls?.clearUserState?.(userId),
     onScoreboardUpdate: (rows) => setScoreboard(Array.isArray(rows) ? rows : []),
     // Si tu useCardSystem dispara esto, mandamos DM inmediato
@@ -121,11 +121,11 @@ export const useUserManagement = (clientRef, opts = {}) => {
       // La waiting room no depende de las reglas de cámara/mic
       waitingRoom.addWaitingUsers(users);
       users.forEach(u => videoControls?.clearUserState?.(u.userId));
-      console.log('⏳ Waiting Room:', users);
+      //console.log('⏳ Waiting Room:', users);
     },
 
     onUserAdded: (items, roster) => {
-      console.log('👤 Entró usuario(s):', items);
+      //console.log('👤 Entró usuario(s):', items);
       for (const it of items) {
         const user = findUserFromPayload(roster, it) || it;
         if (!user) continue;
@@ -186,7 +186,7 @@ export const useUserManagement = (clientRef, opts = {}) => {
             const key = cardSystem.nameToKeyRef?.get(displayName) || displayName;
             cardSystem.keyToLastUserIdRef?.set(key, user.userId);
           }
-        } catch {}
+        } catch { }
       }
       cardSystem.updatePresence(getRoster());
     },
@@ -215,13 +215,13 @@ export const useUserManagement = (clientRef, opts = {}) => {
   // -----------------------------
   const meetingActions = useMeetingActions(clientRef, {
     onUserAdmitted: (user) => {
-      console.log('✅ Admitido desde Waiting Room');
+      // console.log('✅ Admitido desde Waiting Room');
       waitingRoom.removeWaitingUser(user.userId || user.userGUID);
       videoControls?.clearUserState?.(user.userId);
       cardSystem.updatePresence(getRoster());
     },
     onUserHeld: (user) => {
-      console.log(` ${user.displayName || user.userId} enviado a Waiting Room`);
+      //console.log(` ${user.displayName || user.userId} enviado a Waiting Room`);
       videoControls?.clearUserState?.(user.userId);
       cardSystem.updatePresence(getRoster());
     },
@@ -236,7 +236,7 @@ export const useUserManagement = (clientRef, opts = {}) => {
   // -----------------------------
   const videoControls = useVideoControls(clientRef, getRoster, {
     onHoldUser: (user) => {
-      console.log(` ${user.displayName || user.userId} a Waiting Room`);
+      //console.log(` ${user.displayName || user.userId} a Waiting Room`);
       cardSystem.putOnHoldWithCards(user);
     },
     onClearTimers: (userId) => videoControls.clearUserState(userId),
@@ -250,9 +250,9 @@ export const useUserManagement = (clientRef, opts = {}) => {
         if (!camActive()) return; // cámara pausada => no sanciona
         if (user?.bVideoOn === false) {
           await cardSystem.putOnHoldWithCards(user);
-          console.log(`⏱️ Grace agotado (${GRACE_MS / 1000}s) para ${user.displayName || user.userId}`);
+          //console.log(`⏱️ Grace agotado (${GRACE_MS / 1000}s) para ${user.displayName || user.userId}`);
         } else {
-          console.log(`✅ ${user?.displayName || user.userId} encendió cámara a tiempo`);
+          //console.log(`✅ ${user?.displayName || user.userId} encendió cámara a tiempo`);
           videoControls.clearUserState(user.userId);
         }
         return;
@@ -261,7 +261,7 @@ export const useUserManagement = (clientRef, opts = {}) => {
       if (reason === 'micOff') {
         if (!micActive()) return;
         await cardSystem.putOnHoldWithCards(user);
-        console.log(`⏱️ Grace agotado (${GRACE_MS / 1000}s) (mic OFF) para ${user.displayName || user.userId}`);
+        //console.log(`⏱️ Grace agotado (${GRACE_MS / 1000}s) (mic OFF) para ${user.displayName || user.userId}`);
       }
     },
     onPutOnHold: cardSystem.putOnHoldWithCards,
@@ -342,7 +342,7 @@ export const useUserManagement = (clientRef, opts = {}) => {
   // -----------------------------
   // Meeting actions shortcuts
   // -----------------------------
-  const createAndJoinMeeting = meetingActions.createAndJoinMeeting;
+  const joinMeeting = meetingActions.joinMeeting;
 
   const admitOnHold = async () => {
     if (!waitingRoom.waitingUsers.length) {
@@ -371,7 +371,7 @@ export const useUserManagement = (clientRef, opts = {}) => {
 
   return {
     waitingUsers: waitingRoom.waitingUsers,
-    createAndJoinMeeting,
+    joinMeeting,
     admitOnHold,
     sendToOnHold,
     handleVideoState: videoControls.handleVideoState,

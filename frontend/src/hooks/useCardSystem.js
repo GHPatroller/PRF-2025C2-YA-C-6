@@ -206,7 +206,7 @@ export const useCardSystem = (clientRef, callbacks = {}) => {
     const now = Date.now();
     const last = lastYellowAtRef.current.get(key) || 0;
     if (now - last < COOLDOWN_MS) {
-      console.log(`🟨 (skip) duplicate yellow for ${getNiceName(user)} within ${COOLDOWN_MS}ms`);
+     // console.log(`🟨 (skip) duplicate yellow for ${getNiceName(user)} within ${COOLDOWN_MS}ms`);
       return;
     }
     lastYellowAtRef.current.set(key, now);
@@ -216,7 +216,7 @@ export const useCardSystem = (clientRef, callbacks = {}) => {
     yellowByKeyRef.current.set(key, next);
     savePersisted();
 
-    console.log(`🟨 addYellow → ${getNiceName(user)} (${next})`);
+    //console.log(`🟨 addYellow → ${getNiceName(user)} (${next})`);
 
     await onSendNotice?.("yellow", user, next);
     onYellow?.({ key, count: next }); // callback superior (DM, etc.)
@@ -237,7 +237,7 @@ export const useCardSystem = (clientRef, callbacks = {}) => {
     if (!uid || !key) return;
 
     if (inFlightRef.current.has(key)) {
-      console.log(`⏭️ (skip) action in-flight for ${getNiceName(user)}`);
+     // console.log(`⏭️ (skip) action in-flight for ${getNiceName(user)}`);
       return;
     }
     inFlightRef.current.add(key);
@@ -266,7 +266,7 @@ export const useCardSystem = (clientRef, callbacks = {}) => {
         await onSendNotice?.("info", user); // extra si querés
         onScoreboardUpdate?.(buildScoreboard());
       } else {
-        console.log("🟨 (skip) no sumo amarilla porque falló putOnHold");
+      //  console.log("🟨 (skip) no sumo amarilla porque falló putOnHold");
       }
 
       onScoreboardUpdate?.(buildScoreboard());

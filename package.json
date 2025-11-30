@@ -3,10 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "concurrently \"npm run dev --prefix frontend\" \"npm run start --prefix server\""
-  },
-  "devDependencies": {
-    "concurrently": "^8.2.2"
+    "dev": "npm run dev --prefix frontend"
   },
   "dependencies": {
     "@zoom/meetingsdk": "^4.0.7",

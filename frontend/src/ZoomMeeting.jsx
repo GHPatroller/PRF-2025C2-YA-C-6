@@ -1,9 +1,13 @@
+// frontend/src/ZoomMeeting.jsx
 import React, { useRef, useState, useEffect } from "react";
 import { useZoomClient } from "./hooks/useZoomClient";
 import { useUserManagement } from "./hooks/useUserManagement";
 import { useHideCameraButton } from "./hooks/useHideCameraButton";
 import { MeetingControls } from "./components/features/meeting/MeetingControls";
 import { YellowCardOverlayLayer } from "./components/features/meeting/YellowCardOverlayLayer";
+import { useToggleZoomControls } from "./hooks/useToggleZoomControls";
+
+const GRACE_MS = 60_000; // 15s para probar
 
 export default function ZoomMeeting({ role = 0 }) {
   const zoomRef = useRef(null);
@@ -12,12 +16,22 @@ export default function ZoomMeeting({ role = 0 }) {
   const [isRecreo, setIsRecreo] = useState(false);
   const [isMicPaused, setIsMicPaused] = useState(false);
 
-  // 👉 Ocultar el botón de cámara para todos (host + alumnos)
-  useHideCameraButton();
+  console.log("[ZFE] ZoomMeeting render", { role });
+
+  const {
+    hidden: areZoomControlsHidden,
+    toggle: onToggleZoomControls,
+  } = useToggleZoomControls();
+
+  // 🔹 Timer: después de GRACE_MS se esconden los botones para todos
+  useHideCameraButton({
+    enabled: true,
+    delayMs: GRACE_MS,
+  });
 
   const {
     waitingUsers,
-    createAndJoinMeeting,
+    joinMeeting,
     admitOnHold,
     sendToOnHold,
     scoreboard,
@@ -39,7 +53,7 @@ export default function ZoomMeeting({ role = 0 }) {
   return (
     <div style={{ padding: 16 }}>
       <MeetingControls
-        onCreateJoin={createAndJoinMeeting}
+        onCreateJoin={joinMeeting}
         onSendToWaiting={() => sendToOnHold()}
         onAdmitFromWaiting={() => admitOnHold()}
         waitingUsersCount={waitingUsers?.length || 0}
@@ -47,6 +61,8 @@ export default function ZoomMeeting({ role = 0 }) {
         isMicPaused={isMicPaused}
         onToggleRecreo={() => setIsRecreo((v) => !v)}
         onToggleMicPaused={() => setIsMicPaused((v) => !v)}
+        areZoomControlsHidden={areZoomControlsHidden}
+        onToggleZoomControls={onToggleZoomControls}
       />
 
       <div

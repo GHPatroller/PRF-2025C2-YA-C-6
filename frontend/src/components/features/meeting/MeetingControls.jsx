@@ -1,20 +1,24 @@
 import React from 'react';
 import { Button } from '../../ui/button/Button';
 
-export const MeetingControls = ({ 
-  onCreateJoin, 
-  onSendToWaiting, 
-  onAdmitFromWaiting, 
+export const MeetingControls = ({
+  onCreateJoin,
+  onSendToWaiting,
+  onAdmitFromWaiting,
   waitingUsersCount,
-  isRecreo = false, 
-  isMicPaused = false,         
-  onToggleRecreo = () => {} , 
-  onToggleMicPaused = () => {}  
+  isRecreo = false,
+  isMicPaused = false,
+  onToggleRecreo = () => { },
+  onToggleMicPaused = () => { },
+
+  // 🔹 NUEVOS:
+  areZoomControlsHidden = false,
+  onToggleZoomControls = () => { },
 }) => {
   return (
     <div>
       <Button variant="large" onClick={onCreateJoin}>
-        Crear y Unirme como Host
+        Unirse a la Reunión
       </Button>
 
       <div style={{ marginTop: 16 }}>
@@ -22,9 +26,9 @@ export const MeetingControls = ({
           Mandar a sala de espera
         </Button>
 
-        <Button 
-          variant="success" 
-          onClick={onAdmitFromWaiting} 
+        <Button
+          variant="success"
+          onClick={onAdmitFromWaiting}
           disabled={waitingUsersCount === 0}
         >
           Sacar de sala de espera ({waitingUsersCount})
@@ -32,9 +36,26 @@ export const MeetingControls = ({
 
         <button
           onClick={() => window.open('/scoreboard', '_blank', 'noopener,noreferrer')}
->
+        >
           Abrir Scoreboard
         </button>
+      </div>
+
+      {/* 🔹 BOTÓN PARA MOSTRAR/OCULTAR CONTROLES DE ZOOM */}
+      <div style={{ marginTop: 16 }}>
+        <Button
+          variant="secondary"
+          onClick={onToggleZoomControls}
+          title={
+            areZoomControlsHidden
+              ? 'Mostrar botones de Zoom (cámara, mic, etc.)'
+              : 'Ocultar botones de Zoom (cámara, mic, etc.)'
+          }
+        >
+          {areZoomControlsHidden
+            ? 'Mostrar controles de Zoom'
+            : 'Ocultar controles de Zoom'}
+        </Button>
       </div>
 
       {/* Botón RECREO */}
@@ -53,9 +74,8 @@ export const MeetingControls = ({
           <strong>Recreo:</strong> la regla de cámara está pausada.
         </div>
       )}
-   
 
-    {/* Boton MIC */}
+      {/* Boton MIC */}
       <div style={{ marginTop: 16 }}>
         <Button
           variant={isMicPaused ? 'warning' : 'secondary'}
@@ -79,6 +99,5 @@ export const MeetingControls = ({
         </div>
       )}
     </div>
-
   );
 };

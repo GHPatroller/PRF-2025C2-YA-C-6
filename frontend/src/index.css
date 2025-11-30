@@ -66,3 +66,10 @@ button:focus-visible {
     background-color: #f9f9f9;
   }
 }
+
+body.zfe-hide-zoom-buttons button.css-1lnylgv,
+body.zfe-hide-zoom-buttons button.css-1wml07l,
+body.zfe-hide-zoom-buttons button.css-1wml07l *,
+body.zfe-hide-zoom-buttons .css-vubbuv {
+  display: none !important;
+}
