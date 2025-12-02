@@ -62,11 +62,13 @@ try {
     exit;
 }
 
+$iframe_url = new moodle_url('/mod/zoomedu/iframe.php', array('id' => $cm->id));
+
 ?>
 
 <iframe
     id="zoomAppFrame"
-    src="http://localhost:5173"
+    src="<?php echo $iframe_url->out(false); ?>"
     width="100%"
     height="85vh"
     style="border: none; min-height: 600px;"
@@ -106,14 +108,14 @@ try {
             iframe.contentWindow.postMessage({
                 action: "initZoomMeeting",
                 payload: meetingData
-            }, "http://localhost:5173");
+            }, "<?php echo $iframe_url->out(false); ?>");
             retryCount++;
         }
     }
 
     // Escuchar confirmación del iframe
     window.addEventListener("message", (event) => {
-        if (event.origin === "http://localhost:5173") {
+        if (event.origin === "<?php echo $iframe_url->out(false); ?>") {
             console.log("📨 Mensaje recibido del iframe:", event.data);
             
             if (event.data.action === "reactAppReady") {

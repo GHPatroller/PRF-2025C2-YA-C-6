@@ -27,3 +27,14 @@ defined('MOODLE_INTERNAL') || die();
 
 $string['pluginname'] = 'Zoom For Education v1';
 $string['joinmeeting'] = 'Unirse a la reunión';
+$string['zoomforeducationv1name'] = 'Nombre de la reunión';
+$string['zoomforeducationv1settings'] = 'Configuración de la reunión';
+$string['zoomforeducationv1fieldset'] = 'Configuración de la reunión';
+$string['zoomforeducationv1name_help'] = 'Nombre de la reunión';
+$string['zoomforeducationv1settings_help'] = 'Configuración de la reunión';
+$string['zoomforeducationv1fieldset_help'] = 'Configuración de la reunión';
+$string['zoomforeducationv1name_example'] = 'Nombre de la reunión';
+$string['zoomforeducationv1settings_example'] = 'Configuración de la reunión';
+$string['zoomforeducationv1fieldset_example'] = 'Configuración de la reunión';
+$string['zoomforeducationv1name_example'] = 'Nombre de la reunión';
+$string['zoomforeducationv1settings_example'] = 'Configuración de la reunión';
