@@ -25,8 +25,8 @@
 defined('MOODLE_INTERNAL') || die();
 
 $plugin->component = 'mod_zoomforeducationv1';
-$plugin->release = '1.1.0';
-$plugin->version = 2025113001;
+$plugin->release = '1.2.0';
+$plugin->version = 2025120301;
 $plugin->requires = 2022112800;
 $plugin->maturity = MATURITY_ALPHA;
 $plugin->dependencies = [
