@@ -3,9 +3,9 @@ import react from "@vitejs/plugin-react";
 
 export default defineConfig({
   plugins: [react()],
-  base: '/',
+  base: './',
   build: {
-    outDir: '../ui',
+    outDir: '../zoomforeducationv1/ui',
     emptyOutDir: true,
     assetsDir: 'assets',
     rollupOptions: {
