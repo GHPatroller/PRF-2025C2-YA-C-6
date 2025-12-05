@@ -10,10 +10,16 @@ export const zoomAPI = {
     return meetingData;
   },
 
+  getRole: () => {
+    return meetingData?.role ?? 0; // 0 = alumno por defecto
+  },
+
   isReady: () => {
-    return meetingData !== null &&
+    return (
+      meetingData !== null &&
       meetingData.meetingNumber &&
-      meetingData.signature;
+      meetingData.signature
+    );
   },
 
   clearMeetingData: () => {

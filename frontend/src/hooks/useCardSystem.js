@@ -1,21 +1,21 @@
 import React, { useRef, useCallback } from "react";
 
 const MAX_YELLOWS = 3;
-const COOLDOWN_MS = 4000;        // ventana para ignorar duplicados
-const ACTIVE_WINDOW_MS = 30_000; // dentro de esto lo consideramos Activo
+const COOLDOWN_MS = 4000;
+const ACTIVE_WINDOW_MS = 30_000;
 
 export const useCardSystem = (clientRef, callbacks = {}) => {
-  // Estado principal
-  const yellowByKeyRef = useRef(new Map());      // key -> count
-  const redByKeyRef = useRef(new Set());         // set(keys)
-  const nameToKeyRef = useRef(new Map());        // displayName -> key
-  const userIdToKeyRef = useRef(new Map());      // userId -> key
-  const keyToLastUserIdRef = useRef(new Map());  // key -> último userId visto
-  const inFlightRef = useRef(new Set());         // keys procesándose
-  const lastYellowAtRef = useRef(new Map());     // key -> ts última amarilla
-  const lastSeenAtRef = useRef(new Map());       // key -> ts último visto
+  const yellowByKeyRef = useRef(new Map());
+  const redByKeyRef = useRef(new Set());
+  const nameToKeyRef = useRef(new Map());
+  const userIdToKeyRef = useRef(new Map());
+  const keyToLastUserIdRef = useRef(new Map());
+  const inFlightRef = useRef(new Set());
+  const lastYellowAtRef = useRef(new Map());
+  const lastSeenAtRef = useRef(new Map());
+  const keyOrderRef = useRef(new Map());
+  const nextOrderRef = useRef(1);
 
-  // Persistencia (opcional)
   const persistKeyRef = useRef(null);
   const savePersisted = useCallback(() => {
     const k = persistKeyRef.current;
@@ -23,36 +23,47 @@ export const useCardSystem = (clientRef, callbacks = {}) => {
     try {
       const payload = {
         yellow: Array.from(yellowByKeyRef.current.entries()),
-        red:    Array.from(redByKeyRef.current.values()),
+        red: Array.from(redByKeyRef.current.values()),
+        order: Array.from(keyOrderRef.current.entries()),
       };
       localStorage.setItem(k, JSON.stringify(payload));
     } catch {}
   }, []);
+
   const loadPersisted = useCallback((k) => {
     try {
       const raw = localStorage.getItem(k);
       if (!raw) return;
       const obj = JSON.parse(raw);
       yellowByKeyRef.current = new Map(obj?.yellow || []);
-      redByKeyRef.current    = new Set(obj?.red || []);
+      redByKeyRef.current = new Set(obj?.red || []);
+      keyOrderRef.current = new Map(obj?.order || []);
+
+      let max = 0;
+      for (const val of keyOrderRef.current.values()) {
+        if (typeof val === "number" && val > max) max = val;
+      }
+      nextOrderRef.current = max + 1;
     } catch {}
   }, []);
+
   const clearPersisted = useCallback(() => {
     const k = persistKeyRef.current;
     if (!k) return;
-    try { localStorage.removeItem(k); } catch {}
+    try {
+      localStorage.removeItem(k);
+    } catch {}
   }, []);
+
   const enablePersistence = useCallback((meetingKey = "default") => {
     const k = `cards:${String(meetingKey)}`;
     persistKeyRef.current = k;
     loadPersisted(k);
     callbacks?.onScoreboardUpdate?.(buildScoreboard());
-  }, [callbacks, loadPersisted]); // buildScoreboard existe más abajo (hoisting)
+  }, [callbacks, loadPersisted]);
 
-  // callbacks externos
   const { onScoreboardUpdate, onYellow, onSendNotice, onUserExpelled } = callbacks || {};
 
-  // ── Helpers de identidad (clave canónica)
   const getNiceName = useCallback(
     (u) => u?.displayName || u?.userName || u?.name || u?.email || "Usuario",
     []
@@ -67,51 +78,53 @@ export const useCardSystem = (clientRef, callbacks = {}) => {
       u?.userName ||
       u?.displayName ||
       u?.name ||
-      u?.userId, // ojo: userId puede cambiar si pasa por waiting room
+      u?.userId,
     []
   );
 
-  // Si el nombre ya estuvo, reutilizamos su key previa; si no, usamos GUID/email/lo disponible.
-  const resolveKey = useCallback((u) => {
-    if (!u) return null;
-    const name = getNiceName(u);
-    const existing = nameToKeyRef.current.get(name);
-    return existing || rawKeyFromUser(u);
-  }, [getNiceName, rawKeyFromUser]);
+  const resolveKey = useCallback(
+    (u) => {
+      if (!u) return null;
+      const name = getNiceName(u);
+      const existing = nameToKeyRef.current.get(name);
+      return existing || rawKeyFromUser(u);
+    },
+    [getNiceName, rawKeyFromUser]
+  );
 
-  // Consolida los mapeos (nombre→key y userId→key) sin romper claves previas
-  const touchUserMapping = useCallback((u) => {
-    if (!u) return;
-    const name = getNiceName(u);
-    let key = resolveKey(u);
-    if (!key) return;
+  const touchUserMapping = useCallback(
+    (u) => {
+      if (!u) return;
+      const name = getNiceName(u);
+      let key = resolveKey(u);
+      if (!key) return;
 
-    const prevForName = nameToKeyRef.current.get(name);
-    if (prevForName && prevForName !== key) {
-      key = prevForName; // priorizamos continuidad histórica por nombre
-    }
-    nameToKeyRef.current.set(name, key);
+      const prevForName = nameToKeyRef.current.get(name);
+      if (prevForName && prevForName !== key) {
+        key = prevForName;
+      }
+      nameToKeyRef.current.set(name, key);
 
-    if (u?.userId != null) {
-      userIdToKeyRef.current.set(u.userId, key);
-      keyToLastUserIdRef.current.set(key, u.userId);
-    }
-  }, [getNiceName, resolveKey]);
+      if (u?.userId != null) {
+        userIdToKeyRef.current.set(u.userId, key);
+        keyToLastUserIdRef.current.set(key, u.userId);
+      }
+
+      if (!keyOrderRef.current.has(key)) {
+        keyOrderRef.current.set(key, nextOrderRef.current++);
+      }
+    },
+    [getNiceName, resolveKey]
+  );
 
   const isRed = useCallback((key) => redByKeyRef.current.has(key), []);
 
-  // ── Selectores para overlay/scoreboard
-
-  // Mapa userId -> count (solo >0) usando Meeting SDK
   const getYellowByUserId = useCallback(() => {
     const out = new Map();
     const client = clientRef.current;
     if (!client) return out;
 
-    const list =
-      client.getAllUser?.() ||
-      client.getAttendeeslist?.() ||
-      [];
+    const list = client.getAllUser?.() || client.getAttendeeslist?.() || [];
 
     for (const p of list) {
       touchUserMapping(p);
@@ -122,25 +135,26 @@ export const useCardSystem = (clientRef, callbacks = {}) => {
     return out;
   }, [clientRef, resolveKey, touchUserMapping]);
 
-  // Para compat con overlay: devuelve array de userIds con amarilla
-  const getYellowedUserIds = useCallback(() => {
-    const map = getYellowByUserId();
-    return Array.from(map.keys());
-  }, [getYellowByUserId]);
+  const getYellowedUserIds = useCallback(
+    () => Array.from(getYellowByUserId().keys()),
+    [getYellowByUserId]
+  );
 
-  // Conteo directo por userId (útil en el overlay)
-  const yellowCountForUserId = useCallback((userId) => {
-    const key = userIdToKeyRef.current.get(userId);
-    if (!key) return 0;
-    return yellowByKeyRef.current.get(key) || 0;
-  }, []);
+  const yellowCountForUserId = useCallback(
+    (userId) => {
+      const key = userIdToKeyRef.current.get(userId);
+      if (!key) return 0;
+      return yellowByKeyRef.current.get(key) || 0;
+    },
+    []
+  );
 
-  // ── Scoreboard
   const buildScoreboard = useCallback(() => {
     const now = Date.now();
     const base = Array.from(nameToKeyRef.current.entries()).map(([name, key]) => {
       const seen = lastSeenAtRef.current.get(key) || 0;
       const status = now - seen < ACTIVE_WINDOW_MS ? "Activo" : "Fuera";
+      const order = keyOrderRef.current.get(key) ?? Number.MAX_SAFE_INTEGER;
       return {
         id: key,
         name,
@@ -148,11 +162,17 @@ export const useCardSystem = (clientRef, callbacks = {}) => {
         yellows: yellowByKeyRef.current.get(key) || 0,
         red: redByKeyRef.current.has(key),
         status,
+        order,
       };
     });
-    return base.sort(
-      (a, b) => Number(b.red) - Number(a.red) || b.yellows - a.yellows
-    );
+
+    return base.sort((a, b) => {
+      const redDiff = Number(b.red) - Number(a.red);
+      if (redDiff !== 0) return redDiff;
+      const yellowDiff = b.yellows - a.yellows;
+      if (yellowDiff !== 0) return yellowDiff;
+      return a.order - b.order;
+    });
   }, []);
 
   const markSeen = useCallback((u) => {
@@ -172,11 +192,10 @@ export const useCardSystem = (clientRef, callbacks = {}) => {
     if (!u) return;
     const key = resolveKey(u);
     if (!key) return;
-    lastSeenAtRef.current.set(key, 0); // fuerza "Fuera"
+    lastSeenAtRef.current.set(key, 0);
     onScoreboardUpdate?.(buildScoreboard());
   }, [resolveKey, onScoreboardUpdate, buildScoreboard]);
 
-  // ── Reglas de tarjetas
   const escalateToRed = useCallback(async (user) => {
     if (!user) return;
     touchUserMapping(user);
@@ -197,18 +216,13 @@ export const useCardSystem = (clientRef, callbacks = {}) => {
 
   const addYellow = useCallback(async (user) => {
     if (!user) return;
-
     touchUserMapping(user);
     const key = resolveKey(user);
     if (!key) return;
 
-    // anti-duplicado por tiempo
     const now = Date.now();
     const last = lastYellowAtRef.current.get(key) || 0;
-    if (now - last < COOLDOWN_MS) {
-     // console.log(`🟨 (skip) duplicate yellow for ${getNiceName(user)} within ${COOLDOWN_MS}ms`);
-      return;
-    }
+    if (now - last < COOLDOWN_MS) return;
     lastYellowAtRef.current.set(key, now);
 
     const prev = yellowByKeyRef.current.get(key) || 0;
@@ -216,11 +230,8 @@ export const useCardSystem = (clientRef, callbacks = {}) => {
     yellowByKeyRef.current.set(key, next);
     savePersisted();
 
-    //console.log(`🟨 addYellow → ${getNiceName(user)} (${next})`);
-
     await onSendNotice?.("yellow", user, next);
-    onYellow?.({ key, count: next }); // callback superior (DM, etc.)
-
+    onYellow?.({ key, count: next });
     onScoreboardUpdate?.(buildScoreboard());
 
     if (next >= MAX_YELLOWS) {
@@ -230,16 +241,12 @@ export const useCardSystem = (clientRef, callbacks = {}) => {
 
   const putOnHoldWithCards = useCallback(async (user) => {
     if (!user || user.isHost || user.isCohost) return;
-
     touchUserMapping(user);
     const key = resolveKey(user);
     const uid = keyToLastUserIdRef.current.get(key) || user?.userId;
     if (!uid || !key) return;
 
-    if (inFlightRef.current.has(key)) {
-     // console.log(`⏭️ (skip) action in-flight for ${getNiceName(user)}`);
-      return;
-    }
+    if (inFlightRef.current.has(key)) return;
     inFlightRef.current.add(key);
 
     try {
@@ -247,8 +254,7 @@ export const useCardSystem = (clientRef, callbacks = {}) => {
         try {
           await clientRef.current?.putOnHold?.(uid, true);
           await onSendNotice?.("red", user);
-        } catch (err) {
-          console.error("❌ Error putOnHold (red):", err);
+        } catch {
         } finally {
           onScoreboardUpdate?.(buildScoreboard());
         }
@@ -259,17 +265,13 @@ export const useCardSystem = (clientRef, callbacks = {}) => {
       try {
         await clientRef.current?.putOnHold?.(uid, true);
         holdOk = true;
-      } catch (err) { /* noop */ }
+      } catch {}
 
       if (holdOk) {
-        await addYellow(user);              // suma amarilla + callbacks
-        await onSendNotice?.("info", user); // extra si querés
+        await addYellow(user);
+        await onSendNotice?.("info", user);
         onScoreboardUpdate?.(buildScoreboard());
-      } else {
-      //  console.log("🟨 (skip) no sumo amarilla porque falló putOnHold");
       }
-
-      onScoreboardUpdate?.(buildScoreboard());
     } finally {
       inFlightRef.current.delete(key);
     }
@@ -291,15 +293,23 @@ export const useCardSystem = (clientRef, callbacks = {}) => {
       .map((u) => {
         touchUserMapping(u);
         const key = resolveKey(u);
+        const order = keyOrderRef.current.get(key) ?? Number.MAX_SAFE_INTEGER;
         return {
           id: key,
           name: getNiceName(u),
           cam: u?.bVideoOn === true ? "ON" : u?.bVideoOn === false ? "OFF" : "N/D",
           yellows: yellowByKeyRef.current.get(key) || 0,
           red: redByKeyRef.current.has(key),
+          order,
         };
       })
-      .sort((a, b) => Number(b.red) - Number(a.red) || b.yellows - a.yellows);
+      .sort((a, b) => {
+        const redDiff = Number(b.red) - Number(a.red);
+        if (redDiff !== 0) return redDiff;
+        const yellowDiff = b.yellows - a.yellows;
+        if (yellowDiff !== 0) return yellowDiff;
+        return a.order - b.order;
+      });
 
     return rows;
   }, [resolveKey, getNiceName, touchUserMapping]);
@@ -308,36 +318,25 @@ export const useCardSystem = (clientRef, callbacks = {}) => {
     yellowByKeyRef.current.clear();
     redByKeyRef.current.clear();
     lastYellowAtRef.current.clear();
-    // No tocar los mapeos de identidad para conservar continuidad
     savePersisted();
     onScoreboardUpdate?.(buildScoreboard());
   }, [onScoreboardUpdate, buildScoreboard, savePersisted]);
 
-  // API pública del hook
   return {
-    // acciones
     addYellow,
     escalateToRed,
     putOnHoldWithCards,
     resetCards,
-
-    // queries / selectores
     getScoreboard,
     getSnapshot: buildScoreboard,
     updatePresence,
     markSeen,
     markLeft,
-
-    // overlay-friendly
-    getYellowByUserId,        // Map<userId, count>
-    getYellowedUserIds,       // Array<userId>
-    yellowCountForUserId,     // (userId) -> count
-
-    // persistencia
+    getYellowByUserId,
+    getYellowedUserIds,
+    yellowCountForUserId,
     enablePersistence,
     clearPersisted,
-
-    // utilidades/estado
     isRed,
     yellowByKey: yellowByKeyRef.current,
     redByKey: redByKeyRef.current,
