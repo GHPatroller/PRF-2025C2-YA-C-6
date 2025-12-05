@@ -2,15 +2,15 @@
 import { useEffect } from "react";
 
 const BODY_CLASS = "zfe-hide-zoom-buttons";
-const TOOLBAR_ANCHOR_SELECTOR = "button.css-1lnylgv"; // botón principal (para detectar toolbar)
+const TOOLBAR_ANCHOR_SELECTOR = "button.css-1lnylgv";
 
-// Todos los targets que queremos matar cuando se ocultan los controles
+// Elementos que queremos ocultar cuando se bloquean los controles
 const BTN_SELECTORS = [
-  "button.css-1lnylgv",                   // botón principal (video/mic)
-  "button.css-1wml07l",                   // botón de la flechita
-  "button.css-1wml07l *",                 // hijos del botón (svg, etc.)
-  "svg.zoom-MuiSvgIcon-root.css-vubbuv",  // icono flecha
-  ".css-vubbuv",                          // por si cambia un poco la estructura
+  "button.css-1lnylgv",                  // botón principal (video/mic)
+  "button.css-1wml07l",                  // botón de la flechita
+  "button.css-1wml07l *",                // hijos del botón (svg, etc.)
+  "svg.zoom-MuiSvgIcon-root.css-vubbuv", // icono flecha
+  ".css-vubbuv",
 
   // Menús emergentes relacionados (por texto / aria)
   "div[role='menu'][aria-label*='cámara']",
@@ -30,9 +30,6 @@ const BTN_SELECTORS = [
 function hideButtonsInline() {
   BTN_SELECTORS.forEach((selector) => {
     const nodes = document.querySelectorAll(selector);
-    if (nodes.length) {
-      console.log("[ZFE] hideButtonsInline selector:", selector, "->", nodes.length);
-    }
     nodes.forEach((el) => {
       el.style.display = "none";
     });
@@ -42,9 +39,6 @@ function hideButtonsInline() {
 function showButtonsInline() {
   BTN_SELECTORS.forEach((selector) => {
     const nodes = document.querySelectorAll(selector);
-    if (nodes.length) {
-      console.log("[ZFE] showButtonsInline selector:", selector, "->", nodes.length);
-    }
     nodes.forEach((el) => {
       el.style.display = "";
     });
@@ -53,20 +47,17 @@ function showButtonsInline() {
 
 /**
  * Hook con timer POR USUARIO:
- *  - Arranca cuando la toolbar aparece.
- *  - Se resetea cada vez que la toolbar se destruye y vuelve (ej: sala de espera).
- *  - Mientras el body tenga la clase, seguimos barriendo la UI para matar
- *    cualquier flecha / menú que Zoom vuelva a crear.
+ *  - Arranca cuando aparece la toolbar.
+ *  - Se resetea si la toolbar se destruye y vuelve (waiting room, reconexión, etc.).
+ *  - Mientras el body tenga la clase, sigue barriendo la UI para ocultar
+ *    cualquier botón/flecha/menú que Zoom vuelva a renderizar.
  */
 export function useHideCameraButton({
   enabled = true,
   delayMs = 60_000, // 1 minuto
 } = {}) {
   useEffect(() => {
-    console.log("[ZFE] useHideCameraButton effect", { enabled, delayMs });
-
     if (!enabled) {
-      console.log("[ZFE] DISABLED → muestro botones");
       document.body.classList.remove(BODY_CLASS);
       showButtonsInline();
       return;
@@ -85,19 +76,13 @@ export function useHideCameraButton({
     };
 
     const resetGrace = () => {
-      console.log("[ZFE] resetGrace → nueva ventana de tiempo");
       document.body.classList.remove(BODY_CLASS);
       showButtonsInline();
       clearTimer();
 
       timerId = setTimeout(() => {
-        console.log("[ZFE] TIMER FIRED → ocultar botones");
         document.body.classList.add(BODY_CLASS);
         hideButtonsInline();
-        console.log(
-          "[ZFE] body.classList (after add):",
-          document.body.classList.toString()
-        );
       }, delayMs);
     };
 
@@ -108,23 +93,20 @@ export function useHideCameraButton({
       const toolbarAnchor = document.querySelector(TOOLBAR_ANCHOR_SELECTOR);
       const hasToolbar = !!toolbarAnchor;
 
-      // Cuando aparece la toolbar (ej: entrar o re-entrar a la reunión) → reset
+      // Cuando aparece la toolbar (entrar o re-entrar a la reunión) → reset
       if (hasToolbar && !lastHadToolbar) {
-        console.log("[ZFE] toolbar APARECIÓ → resetGrace()");
         resetGrace();
       }
 
       lastHadToolbar = hasToolbar;
 
-      // Mientras el body tenga la clase activa, sigo barriendo por si Zoom
-      // recrea botones / flechas / menús después del timer.
+      // Mientras el body tenga la clase activa, seguimos ocultando
       if (document.body.classList.contains(BODY_CLASS)) {
         hideButtonsInline();
       }
-    }, 800); // cada 800ms
+    }, 800);
 
     return () => {
-      console.log("[ZFE] useHideCameraButton cleanup");
       cancelled = true;
       if (pollId) clearInterval(pollId);
       clearTimer();

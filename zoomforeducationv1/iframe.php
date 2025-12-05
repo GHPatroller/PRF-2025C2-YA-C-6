@@ -99,75 +99,31 @@ $app_config = [
     
     <!-- Inyectamos la configuración inicial antes de cargar la app React -->
     <script type="text/javascript">
+        // Configuración global disponible para React
         window.ZOOM_MEETING_CONFIG = <?php echo json_encode($app_config); ?>;
-        const iframe = document.getElementById("zoomAppFrame");
 
-    const meetingData = {
-        meetingNumber: "<?php echo $meetingNumber; ?>",
-        password: "<?php echo $meetingPassword; ?>",
-        role: <?php echo $app_config['role']; ?>,
-        sdkKey: "<?php echo $app_config['sdkKey']; ?>",
-        signature: "<?php echo $app_config['signature']; ?>",
-        user: {
-            id: <?php echo $app_config['user']['id']; ?>,
-            username: "<?php echo $app_config['user']['username']; ?>",
-            firstname: "<?php echo $app_config['user']['firstname']; ?>",
-            lastname: "<?php echo $app_config['user']['lastname']; ?>",
-            fullname: "<?php echo $app_config['user']['fullname']; ?>",
-            email: "<?php echo $app_config['user']['email']; ?>"
-        }
-    };
+        console.log("📦 Configuración de Zoom inyectada en window.ZOOM_MEETING_CONFIG:", window.ZOOM_MEETING_CONFIG);
 
-    console.log("📦 Datos de reunión preparados:", meetingData);
-
-    let messageSent = false;
-    let retryCount = 0;
-    const maxRetries = 10;
-
-    // Función para enviar el mensaje
-    function sendMeetingData() {
-        if (!messageSent && iframe.contentWindow) {
-            console.log("📤 Enviando datos al iframe (intento " + (retryCount + 1) + ")");
-            iframe.contentWindow.postMessage({
-                action: "initZoomMeeting",
-                payload: meetingData
-            }, "<?php echo $CFG->wwwroot; ?>/mod/zoomforeducationv1/iframe.php");
-            retryCount++;
-        }
-    }
-
-    // Escuchar confirmación del iframe
-    window.addEventListener("message", (event) => {
-        if (event.origin === "<?php echo $CFG->wwwroot; ?>/mod/zoomforeducationv1/iframe.php") {
-            console.log("📨 Mensaje recibido del iframe:", event.data);
-            
-            if (event.data.action === "reactAppReady") {
-                console.log("✅ React app está lista, enviando datos...");
-                sendMeetingData();
-                messageSent = true;
+        // Escuchar cuando React esté listo para recibir los datos
+        window.addEventListener('message', function(event) {
+            // Verificar que el mensaje viene de la misma ventana (mismo origen)
+            if (event.source !== window) {
+                return;
             }
-        }
-    });
 
-    // Enviar cuando el iframe cargue
-    iframe.addEventListener("load", () => {
-        console.log("🔄 Iframe cargado, esperando confirmación de React...");
-        
-        // Intentar enviar inmediatamente
-        setTimeout(sendMeetingData, 500);
-        
-        // Reintentar cada segundo si no se confirmó
-        const retryInterval = setInterval(() => {   
-            if (messageSent || retryCount >= maxRetries) {
-                clearInterval(retryInterval);
-                if (!messageSent) {
-                    console.error("❌ No se pudo establecer comunicación con el iframe");
-                }
-            } else {
-                sendMeetingData();
+            if (event.data?.action === 'reactAppReady') {
+                console.log('✅ React está listo, los datos ya están disponibles en window.ZOOM_MEETING_CONFIG');
             }
-        }, 1000);
-    });
+
+            if (event.data?.action === 'meetingDataReceived') {
+                console.log('✅ React confirmó que recibió los datos correctamente');
+            }
+        });
+
+        // También disparar un evento personalizado para compatibilidad
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('📤 DOM cargado, datos listos para React');
+        });
     </script>
 </head>
 <body>

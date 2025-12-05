@@ -1,29 +1,24 @@
-// frontend/src/ZoomMeeting.jsx
 import React, { useRef, useState, useEffect } from "react";
 import { useZoomClient } from "./hooks/useZoomClient";
 import { useUserManagement } from "./hooks/useUserManagement";
 import { useHideCameraButton } from "./hooks/useHideCameraButton";
 import { MeetingControls } from "./components/features/meeting/MeetingControls";
 import { YellowCardOverlayLayer } from "./components/features/meeting/YellowCardOverlayLayer";
-import { useToggleZoomControls } from "./hooks/useToggleZoomControls";
+import ScoreboardModal from "./components/features/meeting/ScoreboardModal";
+import { zoomAPI } from "./services/zoomAPI"; // asegurate de tener este import
 
-const GRACE_MS = 60_000; // 15s para probar
+const GRACE_MS = 15_000;
 
-export default function ZoomMeeting({ role = 0 }) {
+export default function ZoomMeeting() {
   const zoomRef = useRef(null);
   const clientRef = useZoomClient(zoomRef);
 
   const [isRecreo, setIsRecreo] = useState(false);
   const [isMicPaused, setIsMicPaused] = useState(false);
+  const [showScoreboard, setShowScoreboard] = useState(false);
 
-  console.log("[ZFE] ZoomMeeting render", { role });
+  const isTeacher = zoomAPI.getRole?.() === 1;
 
-  const {
-    hidden: areZoomControlsHidden,
-    toggle: onToggleZoomControls,
-  } = useToggleZoomControls();
-
-  // 🔹 Timer: después de GRACE_MS se esconden los botones para todos
   useHideCameraButton({
     enabled: true,
     delayMs: GRACE_MS,
@@ -61,8 +56,8 @@ export default function ZoomMeeting({ role = 0 }) {
         isMicPaused={isMicPaused}
         onToggleRecreo={() => setIsRecreo((v) => !v)}
         onToggleMicPaused={() => setIsMicPaused((v) => !v)}
-        areZoomControlsHidden={areZoomControlsHidden}
-        onToggleZoomControls={onToggleZoomControls}
+        isTeacher={isTeacher}
+        onOpenScoreboard={() => setShowScoreboard(true)}
       />
 
       <div
@@ -82,6 +77,11 @@ export default function ZoomMeeting({ role = 0 }) {
           cardSystem={cardSystem}
         />
       </div>
+
+      {/* Modal del Scoreboard */}
+      {showScoreboard && (
+        <ScoreboardModal onClose={() => setShowScoreboard(false)} />
+      )}
     </div>
   );
 }
