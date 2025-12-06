@@ -25,16 +25,26 @@
 
 defined('MOODLE_INTERNAL') || die();
 
+// Required strings
 $string['pluginname'] = 'Zoom For Education v1';
-$string['joinmeeting'] = 'Unirse a la reunión';
+$string['modulename'] = 'Zoom For Education v1';
+$string['modulenameplural'] = 'Zoom For Education v1';
+$string['modulename_help'] = 'Utiliza este módulo para integrar reuniones de Zoom en tu curso de Moodle.';
+$string['modulename_link'] = 'mod/zoomforeducationv1/view';
+
+// Activity strings
 $string['zoomforeducationv1name'] = 'Nombre de la reunión';
+$string['zoomforeducationv1name_help'] = 'Ingresa el nombre que deseas dar a esta reunión de Zoom.';
+$string['zoomforeducationv1:addinstance'] = 'Agregar una nueva reunión de Zoom';
+$string['zoomforeducationv1:view'] = 'Ver reunión de Zoom';
+$string['nozoomforeducationv1instances'] = 'No hay reuniones de Zoom en este curso.';
+
+// Form strings
 $string['zoomforeducationv1settings'] = 'Configuración de la reunión';
 $string['zoomforeducationv1fieldset'] = 'Configuración de la reunión';
-$string['zoomforeducationv1name_help'] = 'Nombre de la reunión';
-$string['zoomforeducationv1settings_help'] = 'Configuración de la reunión';
-$string['zoomforeducationv1fieldset_help'] = 'Configuración de la reunión';
-$string['zoomforeducationv1name_example'] = 'Nombre de la reunión';
-$string['zoomforeducationv1settings_example'] = 'Configuración de la reunión';
-$string['zoomforeducationv1fieldset_example'] = 'Configuración de la reunión';
-$string['zoomforeducationv1name_example'] = 'Nombre de la reunión';
-$string['zoomforeducationv1settings_example'] = 'Configuración de la reunión';
+
+// Button strings
+$string['joinmeeting'] = 'Unirse a la reunión';
+
+// Privacy
+$string['privacy:metadata'] = 'El plugin Zoom For Education v1 no almacena ningún dato personal.';
