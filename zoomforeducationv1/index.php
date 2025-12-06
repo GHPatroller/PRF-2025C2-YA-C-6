@@ -52,7 +52,7 @@ echo $OUTPUT->heading($modulenameplural);
 $zoomforeducationv1s = get_all_instances_in_course('zoomforeducationv1', $course);
 
 if (empty($zoomforeducationv1s)) {
-    notice(get_string('no$zoomforeducationv1instances', 'mod_zoomforeducationv1'), new moodle_url('/course/view.php', ['id' => $course->id]));
+    notice(get_string('nozoomforeducationv1instances', 'mod_zoomforeducationv1'), new moodle_url('/course/view.php', ['id' => $course->id]));
 }
 
 $table = new html_table();
